@@ -1,0 +1,792 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>波の基本量シミュレータ</title>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #f8fafc;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --ink-faint: #94a3b8;
+    --line: #e2e8f0;
+    --grid: #eef2f6;
+    --axis: #cbd5e1;
+    --wave: #4f46e5;
+    --wave-soft: #c7d2fe;
+    --particle: #f43f5e;
+    --accent: #0ea5e9;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, .25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;                 /* everything fits on one screen */
+  }
+
+  .app {
+    height: 100dvh;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  /* two columns: graphs on the left, controls on the right */
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    gap: 14px;
+  }
+  .left {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .graph-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    padding-bottom: 12px;
+  }
+  .graph-card canvas { flex: 1 1 auto; min-height: 0; height: auto; }
+  .right { min-height: 0; }
+  .right .card { height: 100%; margin-bottom: 0; overflow: auto; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* portrait / phone: stack into one column and allow scrolling */
+  @media (max-width: 767px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100dvh; }
+    .main { grid-template-columns: 1fr; }
+    .graph-card { min-height: 210px; }
+    .right .card { height: auto; }
+  }
+  header.top h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    margin: 0;
+  }
+  header.top .sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px 10px;
+    margin-bottom: 14px;
+  }
+
+  .graph-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .graph-head .name {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .graph-head .desc {
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--particle);
+    box-shadow: 0 0 0 3px rgba(244, 63, 94, .18);
+  }
+
+  canvas { width: 100%; display: block; border-radius: 10px; touch-action: none; }
+
+  /* ---- controls ---- */
+  .controls .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px 22px;
+  }
+  .ctl { padding: 0 2px; }
+  .ctl .label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .ctl .label .k {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .ctl .label .k small {
+    font-weight: 500;
+    color: var(--ink-faint);
+    margin-left: 4px;
+  }
+  .ctl .label .v {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--wave);
+  }
+  .ctl .label .v .u {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    margin-left: 2px;
+  }
+
+  .frow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* show/hide options */
+  .opts {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: 26px;
+  }
+  .opt input {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--wave);
+    cursor: pointer;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 34px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px; height: 28px;
+    margin-top: -11px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--wave);
+    box-shadow: 0 3px 8px -1px rgba(79, 70, 229, .45);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-track {
+    height: 6px; border-radius: 999px; background: var(--line);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 26px; height: 26px; border: 2px solid var(--wave);
+    background: #fff; border-radius: 50%;
+  }
+
+  /* ---- speed readout ---- */
+  .speed {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff);
+    border: 1px solid #dbeafe;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .speed .formula {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: .01em;
+  }
+  .speed .formula .op { color: var(--ink-faint); margin: 0 4px; }
+  .speed .formula .var-f { color: var(--accent); }
+  .speed .formula .var-l { color: var(--wave); }
+  .speed .formula .var-v { color: var(--ink); }
+  .speed .nums {
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+  .speed .nums b { color: var(--ink); font-size: 14px; }
+
+  /* ---- buttons ---- */
+  .btns {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  button.b {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 11px;
+    cursor: pointer;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button.b:active { transform: scale(.96); }
+  button.b.primary {
+    background: var(--wave);
+    border-color: var(--wave);
+    color: #fff;
+    box-shadow: 0 6px 16px -6px rgba(79, 70, 229, .6);
+  }
+  button.b.active-dir {
+    border-color: var(--wave);
+    color: var(--wave);
+    background: #eef2ff;
+  }
+  .seg { display: inline-flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .seg button {
+    border: none;
+    background: #fff;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .seg button.on { background: var(--wave); color: #fff; }
+
+  /* controls sidebar: stack the button groups, full-width for easy tapping */
+  .right .btns { flex-direction: column; align-items: stretch; }
+  .btnrow { display: flex; gap: 10px; }
+  .btnrow #bPlay { flex: 2; justify-content: center; }
+  .btnrow #bReset { flex: 1; justify-content: center; }
+  .right .seg { width: 100%; }
+  .right .seg button { flex: 1; }
+
+  .hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>波の基本量シミュレータ</h1>
+    <span class="sub">波形のグラフ（y–x）と、1点の振動のグラフ（y–t）を見くらべよう</span>
+  </header>
+
+  <div class="main">
+   <div class="left">
+    <div class="card graph-card">
+      <div class="graph-head">
+        <div>
+          <span class="name">① 波形のグラフ　y–x</span>
+          <span class="desc">　横軸 = 位置</span>
+        </div>
+        <span class="badge"><span class="dot"></span>波の上をタップ → 注目する点をえらぶ</span>
+      </div>
+      <canvas id="cvX"></canvas>
+    </div>
+
+    <div class="card graph-card">
+      <div class="graph-head">
+        <div>
+          <span class="name">② 1点の振動のグラフ　y–t</span>
+          <span class="desc">　横軸 = 時間（えらんだ●の動き）</span>
+        </div>
+        <span class="badge">▶ 再生で t=0 から描き出される</span>
+      </div>
+      <canvas id="cvT"></canvas>
+    </div>
+   </div>
+
+   <aside class="right">
+  <div class="card controls">
+    <div class="row">
+      <div class="ctl">
+        <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="vA">0.70</span><span class="u">m</span></span></div>
+        <input type="range" id="rA" min="0" max="1" step="0.01" value="0.7">
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="vL">2.5</span><span class="u">m</span></span></div>
+        <input type="range" id="rL" min="1" max="5" step="0.1" value="2.5">
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="vF">0.50</span><span class="u">Hz</span></span></div>
+        <input type="range" id="rF" min="0.1" max="1.5" step="0.05" value="0.5">
+      </div>
+    </div>
+
+    <div class="opts">
+      <label class="opt"><input type="checkbox" id="cShowVT" checked><span>v・T の値を表示</span></label>
+      <label class="opt"><input type="checkbox" id="cGhost"><span>t = 0 s の波形を点線で残す</span></label>
+    </div>
+
+    <div class="speed" id="speedBox">
+      <div class="frow">
+        <span class="formula">
+          <span class="var-v">v</span><span class="op">=</span><span class="var-f">f</span><span class="op">×</span><span class="var-l">λ</span>
+        </span>
+        <span class="nums" id="vNums"></span>
+      </div>
+      <div class="frow">
+        <span class="formula">
+          <span class="var-v">T</span><span class="op">=</span><span class="op">1/</span><span class="var-f">f</span>
+        </span>
+        <span class="nums" id="tNums"></span>
+      </div>
+    </div>
+
+    <div class="btns">
+      <div class="btnrow">
+        <button class="b primary" id="bPlay">⏸ 一時停止</button>
+        <button class="b" id="bReset">↺ リセット</button>
+      </div>
+      <div class="seg" id="segDir">
+        <button data-dir="1" class="on">→ 右へ進む</button>
+        <button data-dir="-1">← 左へ進む</button>
+      </div>
+    </div>
+  </div>
+   </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- state ----
+  const state = {
+    A: 0.7,        // amplitude (0..1, fraction of half-height)
+    lambda: 2.5,   // wavelength (world units)
+    f: 0.5,        // frequency (Hz, arbitrary)
+    dir: 1,        // +1 right, -1 left
+    playing: false,   // start paused so the y-t trace begins from empty
+    t: 0,          // simulation time (s)
+    traceStartT: 0,   // sim time at which the current y-t trace began (t=0 of the pen)
+    x0: 5.0,       // highlighted particle position (world units)
+    ghost: false,     // keep the t=0 waveform as a dashed reference
+  };
+
+  const WORLD_W = 10;          // visible x-range in world units
+  const PERIODS_ON_T = 3;      // how many periods fill the y-t graph width
+
+  // ---- canvases ----
+  const cvX = document.getElementById("cvX");
+  const cvT = document.getElementById("cvT");
+  const ctxX = cvX.getContext("2d");
+  const ctxT = cvT.getContext("2d");
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function sizeCanvas(cv, ctx) {
+    // display size is driven by CSS (the canvas flexes to fill its card);
+    // match the backing store to it, scaled for device pixel ratio.
+    const cssW = cv.clientWidth;
+    const cssH = cv.clientHeight;
+    cv.width = Math.max(1, Math.round(cssW * dpr));
+    cv.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+  let dimX, dimT;
+  function layout() {
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    dimX = sizeCanvas(cvX, ctxX);
+    dimT = sizeCanvas(cvT, ctxT);
+  }
+
+  // ---- wave function ----
+  // y in [-1,1]; rightward: phase = 2π(x/λ - f t)
+  function waveY(x, t) {
+    return state.A * Math.sin(2 * Math.PI * (x / state.lambda - state.dir * state.f * t));
+  }
+
+  // ---- drawing helpers ----
+  function bg(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+  }
+  function frame(ctx, w, h) {
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  }
+  function axis(ctx, w, h, ticks) {
+    const midY = h / 2;
+    const ampPx = h / 2 - 14;
+    // vertical grid ticks — inset by PAD so they line up with the plotted data
+    const innerW = w - 2 * PAD;
+    ctx.strokeStyle = "#eef2f6";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= ticks; i++) {
+      const x = PAD + (innerW * i) / ticks;
+      ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+    // ±1 amplitude guide lines (faint dashed)
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, midY - ampPx); ctx.lineTo(w, midY - ampPx);
+    ctx.moveTo(0, midY + ampPx); ctx.lineTo(w, midY + ampPx);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // zero line (drawn last so it sits on top)
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
+  }
+
+  // Draw a small numeric label with a translucent white backing so it stays
+  // legible on top of the wave. align: 'left' | 'center' | 'right'.
+  function numLabel(ctx, text, x, y, align, color) {
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width;
+    const padX = 3;
+    let bx = x - padX;
+    if (align === "center") bx = x - tw / 2 - padX;
+    else if (align === "right") bx = x - tw - padX;
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillRect(bx, y - 8, tw + padX * 2, 16);
+    ctx.fillStyle = color || "#64748b";
+    ctx.textAlign = align === "center" ? "center" : (align === "right" ? "right" : "left");
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+
+  // arcTo-based rounded rect (roundRect is not available on older iPad Safari)
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Live time readout drawn on the graph itself: a solid dark pill in the top
+  // right corner, so it stays readable even when a crest passes behind it.
+  function timeChip(ctx, w, text) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 22, bh = 28;
+    const bx = w - PAD - bw, by = 7;
+    roundRectPath(ctx, bx, by, bw, bh, 9);
+    ctx.fillStyle = "rgba(15,23,42,0.88)";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+  }
+
+  const PAD = 10; // horizontal padding inside graph for wave
+
+  function drawXGraph() {
+    const { w, h } = dimX;
+    bg(ctxX, w, h);
+    const midY = h / 2;
+    const ampPx = (h / 2 - 14) ; // max pixel amplitude at A=1
+    axis(ctxX, w, h, Math.round(WORLD_W)); // one tick per world unit-ish
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+
+    // t=0 waveform kept as a dashed reference, so the distance the wave has
+    // travelled since the pen started is readable straight off the graph
+    if (state.ghost) {
+      ctxX.beginPath();
+      for (let px = PAD; px <= w - PAD; px++) {
+        const xw = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+        const y = midY - waveY(xw, state.traceStartT) * ampPx;
+        if (px === PAD) ctxX.moveTo(px, y); else ctxX.lineTo(px, y);
+      }
+      ctxX.strokeStyle = "#a5b4fc";
+      ctxX.lineWidth = 2;
+      ctxX.setLineDash([6, 5]);
+      ctxX.stroke();
+      ctxX.setLineDash([]);
+    }
+
+    // wave curve
+    ctxX.beginPath();
+    for (let px = PAD; px <= w - PAD; px++) {
+      const xw = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+      const y = midY - waveY(xw, state.t) * ampPx;
+      if (px === PAD) ctxX.moveTo(px, y); else ctxX.lineTo(px, y);
+    }
+    ctxX.strokeStyle = "#4f46e5";
+    ctxX.lineWidth = 3;
+    ctxX.lineJoin = "round";
+    ctxX.stroke();
+
+    // highlighted particle
+    const px0 = x2px(state.x0);
+    const py0 = midY - waveY(state.x0, state.t) * ampPx;
+    // vertical guide from axis to particle
+    ctxX.strokeStyle = "rgba(244,63,94,.35)";
+    ctxX.lineWidth = 1.5;
+    ctxX.setLineDash([4, 4]);
+    ctxX.beginPath(); ctxX.moveTo(px0, midY); ctxX.lineTo(px0, py0); ctxX.stroke();
+    // horizontal guide showing current height
+    ctxX.beginPath(); ctxX.moveTo(px0, py0); ctxX.lineTo(w - PAD, py0); ctxX.stroke();
+    ctxX.setLineDash([]);
+    // dot
+    ctxX.fillStyle = "#f43f5e";
+    ctxX.beginPath(); ctxX.arc(px0, py0, 8, 0, 7); ctxX.fill();
+    ctxX.strokeStyle = "rgba(244,63,94,.25)";
+    ctxX.lineWidth = 6;
+    ctxX.beginPath(); ctxX.arc(px0, py0, 8, 0, 7); ctxX.stroke();
+
+    // axis numbers: vertical = displacement y [m], horizontal = position x [m]
+    numLabel(ctxX, "+1 m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxX, "0", PAD + 2, midY, "left");
+    numLabel(ctxX, "−1 m", PAD + 2, midY + ampPx, "left");
+    for (let xw = 2; xw <= WORLD_W; xw += 2) {
+      numLabel(ctxX, String(xw), x2px(xw), midY + 11, "center");
+    }
+    numLabel(ctxX, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    // live time, on the graph so it can be read without looking away
+    timeChip(ctxX, w, "t = " + Math.max(0, state.t - state.traceStartT).toFixed(2) + " s");
+
+    frame(ctxX, w, h);
+  }
+
+  function drawTGraph() {
+    const { w, h } = dimT;
+    bg(ctxT, w, h);
+    const midY = h / 2;
+    const ampPx = (h / 2 - 14);
+    const period = 1 / state.f;
+    const windowSec = PERIODS_ON_T * period;
+    const innerW = w - 2 * PAD;
+    const pps = innerW / windowSec;            // pixels per second along the time axis
+    axis(ctxT, w, h, PERIODS_ON_T);            // one tick per period
+
+    // Pen-writing trace: time relative to when this trace started (traceStartT).
+    // While elapsed <= windowSec the pen grows rightward from the left edge (t=0);
+    // once it fills the window it scrolls, keeping the pen head at the right edge.
+    const elapsed = Math.max(0, state.t - state.traceStartT);
+    let e0, headPx;                            // e0 = relative time at the left edge
+    if (elapsed <= windowSec) {
+      e0 = 0;
+      headPx = PAD + elapsed * pps;
+    } else {
+      e0 = elapsed - windowSec;
+      headPx = w - PAD;
+    }
+
+    // trace from the left edge up to the pen head
+    ctxT.beginPath();
+    let started = false;
+    for (let px = PAD; px <= headPx; px++) {
+      const tau = state.traceStartT + e0 + (px - PAD) / pps; // absolute sim time
+      const y = midY - waveY(state.x0, tau) * ampPx;
+      if (!started) { ctxT.moveTo(px, y); started = true; } else ctxT.lineTo(px, y);
+    }
+    ctxT.strokeStyle = "#f43f5e";
+    ctxT.lineWidth = 3;
+    ctxT.lineJoin = "round";
+    ctxT.stroke();
+
+    // pen head — same height as the particle in graph ① at the current moment
+    const pyNow = midY - waveY(state.x0, state.t) * ampPx;
+    ctxT.strokeStyle = "rgba(244,63,94,.30)";
+    ctxT.lineWidth = 1.5;
+    ctxT.setLineDash([4, 4]);
+    ctxT.beginPath(); ctxT.moveTo(PAD, pyNow); ctxT.lineTo(headPx, pyNow); ctxT.stroke();
+    ctxT.setLineDash([]);
+    ctxT.fillStyle = "#f43f5e";
+    ctxT.beginPath(); ctxT.arc(headPx, pyNow, 7, 0, 7); ctxT.fill();
+
+    // axis numbers: vertical = displacement y [m], horizontal = time t [s]
+    numLabel(ctxT, "+1 m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxT, "0", PAD + 2, midY, "left");
+    numLabel(ctxT, "−1 m", PAD + 2, midY + ampPx, "left");
+    for (let i = 1; i <= PERIODS_ON_T; i++) {
+      const x = PAD + (innerW * i) / PERIODS_ON_T;
+      numLabel(ctxT, (e0 + i * period).toFixed(1), x, midY + 11, "center");
+    }
+    numLabel(ctxT, "t [s]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    frame(ctxT, w, h);
+  }
+
+  function draw() { drawXGraph(); drawTGraph(); }
+
+  // ---- animation loop ----
+  let last = null;
+  function loop(ts) {
+    if (last == null) last = ts;
+    const dt = Math.min(0.05, (ts - last) / 1000); // clamp for tab-switch
+    last = ts;
+    if (state.playing) state.t += dt;
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- UI wiring ----
+  const vA = document.getElementById("vA");
+  const vL = document.getElementById("vL");
+  const vF = document.getElementById("vF");
+  const rA = document.getElementById("rA");
+  const rL = document.getElementById("rL");
+  const rF = document.getElementById("rF");
+  const vNums = document.getElementById("vNums");
+  const tNums = document.getElementById("tNums");
+
+  function refreshReadouts() {
+    vA.textContent = state.A.toFixed(2);
+    vL.textContent = state.lambda.toFixed(1);
+    vF.textContent = state.f.toFixed(2);
+    const v = state.f * state.lambda;
+    const T = 1 / state.f;
+    vNums.innerHTML =
+      '= <span style="color:var(--accent)">' + state.f.toFixed(2) + ' Hz</span> × ' +
+      '<span style="color:var(--wave)">' + state.lambda.toFixed(1) + ' m</span> = ' +
+      '<b>' + v.toFixed(2) + ' m/s</b>　<span style="color:var(--ink-faint)">波の速さ</span>';
+    tNums.innerHTML =
+      '= 1 / <span style="color:var(--accent)">' + state.f.toFixed(2) + ' Hz</span> = ' +
+      '<b>' + T.toFixed(2) + ' s</b>　<span style="color:var(--ink-faint)">周期</span>';
+  }
+
+  // display options — hiding v and T lets students hunt for the relationships
+  // between A, λ, f and v, T themselves
+  const cShowVT = document.getElementById("cShowVT");
+  const speedBox = document.getElementById("speedBox");
+  const cGhost = document.getElementById("cGhost");
+  function syncOpts() {
+    speedBox.style.display = cShowVT.checked ? "" : "none";
+    state.ghost = cGhost.checked;
+  }
+  cShowVT.addEventListener("change", syncOpts);
+  cGhost.addEventListener("change", syncOpts);
+
+  rA.addEventListener("input", () => { state.A = +rA.value; refreshReadouts(); });
+  rL.addEventListener("input", () => { state.lambda = +rL.value; refreshReadouts(); });
+  rF.addEventListener("input", () => { state.f = +rF.value; refreshReadouts(); });
+
+  const bPlay = document.getElementById("bPlay");
+  function syncPlayBtn() {
+    bPlay.textContent = state.playing ? "⏸ 一時停止" : "▶ 再生";
+    bPlay.classList.add("primary"); // play/pause is always the main call-to-action
+  }
+  bPlay.addEventListener("click", () => {
+    state.playing = !state.playing;
+    syncPlayBtn();
+  });
+
+  document.getElementById("bReset").addEventListener("click", () => {
+    state.t = 0; state.traceStartT = 0;
+    state.A = 0.7; state.lambda = 2.5; state.f = 0.5; state.dir = 1; state.x0 = 5.0;
+    rA.value = 0.7; rL.value = 2.5; rF.value = 0.5;
+    setDir(1);
+    state.playing = false;   // paused, y-t empty — press play to draw it from t=0
+    syncPlayBtn();
+    refreshReadouts();
+  });
+
+  const segDir = document.getElementById("segDir");
+  function setDir(d) {
+    state.dir = d;
+    [...segDir.children].forEach(btn => btn.classList.toggle("on", +btn.dataset.dir === d));
+  }
+  segDir.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (btn) setDir(+btn.dataset.dir);
+  });
+
+  // tap on y-x graph to pick the highlighted particle
+  // Selecting a particle auto-pauses and restarts the y-t trace, so the student
+  // can then press play and watch the point's motion drawn out from t=0.
+  function pickFromEvent(e) {
+    const rect = cvX.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const px = clientX - rect.left;
+    const inner = rect.width - 2 * PAD;
+    let xw = ((px - PAD) / inner) * WORLD_W;
+    xw = Math.max(0, Math.min(WORLD_W, xw));
+    state.x0 = xw;
+    state.traceStartT = state.t;   // pen restarts from the current moment
+    state.playing = false;         // auto-pause after selection
+    syncPlayBtn();
+  }
+  cvX.addEventListener("pointerdown", pickFromEvent);
+  cvX.addEventListener("pointermove", (e) => { if (e.pressure > 0 || e.buttons) pickFromEvent(e); });
+
+  window.addEventListener("resize", () => { layout(); draw(); });
+  window.addEventListener("load", () => { layout(); draw(); });
+  window.addEventListener("orientationchange", () => { layout(); draw(); });
+
+  // Re-measure once the canvases actually have a laid-out width. Relying on a
+  // synchronous layout() at load time can capture clientWidth === 0 before the
+  // browser has sized the elements (which zeroes the backing store).
+  const ro = new ResizeObserver(() => { layout(); draw(); });
+  ro.observe(cvX);
+  ro.observe(cvT);
+
+  // ---- init ----
+  layout();
+  setDir(1);
+  syncPlayBtn();
+  syncOpts();
+  refreshReadouts();
+  requestAnimationFrame(loop);
+})();
+</script>

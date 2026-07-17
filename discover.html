@@ -1,0 +1,560 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>波の基本式を見つけよう</title>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #f8fafc;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --ink-faint: #94a3b8;
+    --line: #e2e8f0;
+    --wave: #4f46e5;
+    --accent: #0ea5e9;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, .25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;                 /* everything fits on one screen */
+  }
+
+  .app {
+    height: 100dvh;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  /* two columns: graph on the left, controls on the right */
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    gap: 14px;
+  }
+  .left {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;   /* single graph sits centred in the column */
+  }
+  .graph-card {
+    flex: 0 1 400px;           /* capped so the wave keeps a sensible aspect */
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    padding-bottom: 12px;
+  }
+  .graph-card canvas { flex: 1 1 auto; min-height: 0; height: auto; }
+  .right { min-height: 0; }
+  .right .card { height: 100%; margin-bottom: 0; overflow: auto; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  header.top h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    margin: 0;
+  }
+  header.top .sub { font-size: 13px; color: var(--ink-soft); }
+
+  /* portrait / phone: stack into one column and allow scrolling */
+  @media (max-width: 767px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100dvh; }
+    .main { grid-template-columns: 1fr; }
+    .graph-card { flex: none; height: 260px; }
+    .right .card { height: auto; }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px 10px;
+    margin-bottom: 14px;
+  }
+
+  .graph-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .graph-head .name { font-size: 14px; font-weight: 700; }
+  .graph-head .desc { font-size: 12px; color: var(--ink-faint); }
+
+  canvas { width: 100%; display: block; border-radius: 10px; touch-action: none; }
+
+  /* ---- controls ---- */
+  .controls .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px 22px;
+  }
+  .ctl { padding: 0 2px; }
+  .ctl .label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .ctl .label .k { font-size: 14px; font-weight: 700; }
+  .ctl .label .k small { font-weight: 500; color: var(--ink-faint); margin-left: 4px; }
+  .ctl .label .v {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--wave);
+  }
+  .ctl .label .v .u {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    margin-left: 2px;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 34px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 999px; background: var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px; height: 28px;
+    margin-top: -11px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--wave);
+    box-shadow: 0 3px 8px -1px rgba(79, 70, 229, .45);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-track {
+    height: 6px; border-radius: 999px; background: var(--line);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 26px; height: 26px; border: 2px solid var(--wave);
+    background: #fff; border-radius: 50%;
+  }
+
+  /* show/hide options */
+  .opts { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: 26px;
+  }
+  .opt input {
+    flex: none;
+    width: 18px; height: 18px;
+    accent-color: var(--wave);
+    cursor: pointer;
+  }
+
+  /* ---- buttons ---- */
+  .btns { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+  button.b {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 11px;
+    cursor: pointer;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button.b:active { transform: scale(.96); }
+  button.b.primary {
+    background: var(--wave);
+    border-color: var(--wave);
+    color: #fff;
+    box-shadow: 0 6px 16px -6px rgba(79, 70, 229, .6);
+  }
+  .seg { display: inline-flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .seg button {
+    border: none;
+    background: #fff;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .seg button.on { background: var(--wave); color: #fff; }
+
+  .right .btns { flex-direction: column; align-items: stretch; }
+  .btnrow { display: flex; gap: 10px; }
+  .btnrow #bPlay { flex: 2; justify-content: center; }
+  .btnrow #bReset { flex: 1; justify-content: center; }
+  .right .seg { width: 100%; }
+  .right .seg button { flex: 1; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>波の基本式を見つけよう</h1>
+    <span class="sub">A・λ・f を変えて、波の速さ v が何で決まるかを調べよう</span>
+  </header>
+
+  <div class="main">
+   <div class="left">
+    <div class="card graph-card">
+      <div class="graph-head">
+        <div>
+          <span class="name">波形のグラフ　y–x</span>
+          <span class="desc">　横軸 = 位置</span>
+        </div>
+      </div>
+      <canvas id="cvX"></canvas>
+    </div>
+   </div>
+
+   <aside class="right">
+  <div class="card controls">
+    <div class="row">
+      <div class="ctl">
+        <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="vA">0.70</span><span class="u">m</span></span></div>
+        <input type="range" id="rA" min="0" max="1" step="0.01" value="0.7">
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="vL">2.5</span><span class="u">m</span></span></div>
+        <input type="range" id="rL" min="1" max="5" step="0.1" value="2.5">
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="vF">0.50</span><span class="u">Hz</span></span></div>
+        <input type="range" id="rF" min="0.1" max="1.5" step="0.05" value="0.5">
+      </div>
+    </div>
+
+    <div class="opts">
+      <label class="opt"><input type="checkbox" id="cDots"><span>波を媒質（点）の集まりで表示</span></label>
+      <label class="opt"><input type="checkbox" id="cGhost" checked><span>t = 0 s の波形を点線で残す</span></label>
+    </div>
+
+    <div class="btns">
+      <div class="btnrow">
+        <button class="b primary" id="bPlay">⏸ 一時停止</button>
+        <button class="b" id="bReset">↺ リセット</button>
+      </div>
+      <div class="seg" id="segDir">
+        <button data-dir="1" class="on">→ 右へ進む</button>
+        <button data-dir="-1">← 左へ進む</button>
+      </div>
+    </div>
+  </div>
+   </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- state ----
+  const state = {
+    A: 0.7,          // amplitude (m)
+    lambda: 2.5,     // wavelength (m)
+    f: 0.5,          // frequency (Hz)
+    dir: 1,          // +1 right, -1 left
+    playing: false,  // start paused at t = 0
+    t: 0,            // time (s) — t = 0 is the start / last reset
+    ghost: true,     // keep the t=0 waveform as a dashed reference
+    dots: false,     // draw the medium as separate particles instead of a line
+  };
+
+  const WORLD_W = 10;   // visible x-range (m)
+  const DOT_GAP = 0.3;  // spacing (m) between medium particles
+
+  // ---- canvas ----
+  const cvX = document.getElementById("cvX");
+  const ctxX = cvX.getContext("2d");
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function sizeCanvas(cv, ctx) {
+    const cssW = cv.clientWidth;
+    const cssH = cv.clientHeight;
+    cv.width = Math.max(1, Math.round(cssW * dpr));
+    cv.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+  let dimX;
+  function layout() {
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    dimX = sizeCanvas(cvX, ctxX);
+  }
+
+  // ---- wave function ----
+  // y in [-1,1]; rightward: phase = 2π(x/λ - f t)
+  function waveY(x, t) {
+    return state.A * Math.sin(2 * Math.PI * (x / state.lambda - state.dir * state.f * t));
+  }
+
+  // ---- drawing helpers ----
+  function bg(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+  }
+  function frame(ctx, w, h) {
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  }
+  function axis(ctx, w, h, ticks) {
+    const midY = h / 2;
+    const ampPx = h / 2 - 14;
+    const innerW = w - 2 * PAD;
+    ctx.strokeStyle = "#eef2f6";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= ticks; i++) {
+      const x = PAD + (innerW * i) / ticks;
+      ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, midY - ampPx); ctx.lineTo(w, midY - ampPx);
+    ctx.moveTo(0, midY + ampPx); ctx.lineTo(w, midY + ampPx);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
+  }
+
+  function numLabel(ctx, text, x, y, align, color) {
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width;
+    const padX = 3;
+    let bx = x - padX;
+    if (align === "center") bx = x - tw / 2 - padX;
+    else if (align === "right") bx = x - tw - padX;
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillRect(bx, y - 8, tw + padX * 2, 16);
+    ctx.fillStyle = color || "#64748b";
+    ctx.textAlign = align === "center" ? "center" : (align === "right" ? "right" : "left");
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+
+  // arcTo-based rounded rect (roundRect is not available on older iPad Safari)
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function timeChip(ctx, w, text) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 22, bh = 28;
+    const bx = w - PAD - bw, by = 7;
+    roundRectPath(ctx, bx, by, bw, bh, 9);
+    ctx.fillStyle = "rgba(15,23,42,0.88)";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+  }
+
+  const PAD = 10; // horizontal padding inside graph for wave
+
+  function drawXGraph() {
+    const { w, h } = dimX;
+    bg(ctxX, w, h);
+    const midY = h / 2;
+    const ampPx = (h / 2 - 14);
+    axis(ctxX, w, h, Math.round(WORLD_W));
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+
+    // t=0 waveform kept as a dashed reference, so the distance the wave has
+    // travelled is readable straight off the graph
+    if (state.ghost) {
+      ctxX.beginPath();
+      for (let px = PAD; px <= w - PAD; px++) {
+        const xw = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+        const y = midY - waveY(xw, 0) * ampPx;
+        if (px === PAD) ctxX.moveTo(px, y); else ctxX.lineTo(px, y);
+      }
+      ctxX.strokeStyle = "#a5b4fc";
+      ctxX.lineWidth = 2;
+      ctxX.setLineDash([6, 5]);
+      ctxX.stroke();
+      ctxX.setLineDash([]);
+    }
+
+    if (state.dots) {
+      // the medium as separate particles: each keeps its own fixed x and only
+      // moves up and down, so the wave travels while the medium does not
+      ctxX.fillStyle = "#4f46e5";
+      const n = Math.floor(WORLD_W / DOT_GAP);
+      for (let i = 0; i <= n; i++) {
+        const xw = i * DOT_GAP;
+        const y = midY - waveY(xw, state.t) * ampPx;
+        ctxX.beginPath();
+        ctxX.arc(x2px(xw), y, 3.5, 0, 7);
+        ctxX.fill();
+      }
+    } else {
+      // wave curve
+      ctxX.beginPath();
+      for (let px = PAD; px <= w - PAD; px++) {
+        const xw = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+        const y = midY - waveY(xw, state.t) * ampPx;
+        if (px === PAD) ctxX.moveTo(px, y); else ctxX.lineTo(px, y);
+      }
+      ctxX.strokeStyle = "#4f46e5";
+      ctxX.lineWidth = 3;
+      ctxX.lineJoin = "round";
+      ctxX.stroke();
+    }
+
+    // axis numbers: vertical = displacement y [m], horizontal = position x [m]
+    numLabel(ctxX, "+1 m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxX, "0", PAD + 2, midY, "left");
+    numLabel(ctxX, "−1 m", PAD + 2, midY + ampPx, "left");
+    for (let xw = 2; xw <= WORLD_W; xw += 2) {
+      numLabel(ctxX, String(xw), x2px(xw), midY + 11, "center");
+    }
+    numLabel(ctxX, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    timeChip(ctxX, w, "t = " + state.t.toFixed(2) + " s");
+
+    frame(ctxX, w, h);
+  }
+
+  function draw() { drawXGraph(); }
+
+  // ---- animation loop ----
+  let last = null;
+  function loop(ts) {
+    if (last == null) last = ts;
+    const dt = Math.min(0.05, (ts - last) / 1000);
+    last = ts;
+    if (state.playing) state.t += dt;
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- UI wiring ----
+  const vA = document.getElementById("vA");
+  const vL = document.getElementById("vL");
+  const vF = document.getElementById("vF");
+  const rA = document.getElementById("rA");
+  const rL = document.getElementById("rL");
+  const rF = document.getElementById("rF");
+
+  function refreshReadouts() {
+    vA.textContent = state.A.toFixed(2);
+    vL.textContent = state.lambda.toFixed(1);
+    vF.textContent = state.f.toFixed(2);
+  }
+
+  const cGhost = document.getElementById("cGhost");
+  const cDots = document.getElementById("cDots");
+  function syncOpts() {
+    state.ghost = cGhost.checked;
+    state.dots = cDots.checked;
+  }
+  cGhost.addEventListener("change", syncOpts);
+  cDots.addEventListener("change", syncOpts);
+
+  rA.addEventListener("input", () => { state.A = +rA.value; refreshReadouts(); });
+  rL.addEventListener("input", () => { state.lambda = +rL.value; refreshReadouts(); });
+  rF.addEventListener("input", () => { state.f = +rF.value; refreshReadouts(); });
+
+  const bPlay = document.getElementById("bPlay");
+  function syncPlayBtn() {
+    bPlay.textContent = state.playing ? "⏸ 一時停止" : "▶ 再生";
+    bPlay.classList.add("primary");
+  }
+  bPlay.addEventListener("click", () => {
+    state.playing = !state.playing;
+    syncPlayBtn();
+  });
+
+  document.getElementById("bReset").addEventListener("click", () => {
+    state.t = 0;
+    state.A = 0.7; state.lambda = 2.5; state.f = 0.5; state.dir = 1;
+    rA.value = 0.7; rL.value = 2.5; rF.value = 0.5;
+    setDir(1);
+    state.playing = false;   // paused at t = 0, ready to play
+    syncPlayBtn();
+    refreshReadouts();
+  });
+
+  const segDir = document.getElementById("segDir");
+  function setDir(d) {
+    state.dir = d;
+    [...segDir.children].forEach(btn => btn.classList.toggle("on", +btn.dataset.dir === d));
+  }
+  segDir.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (btn) setDir(+btn.dataset.dir);
+  });
+
+  window.addEventListener("resize", () => { layout(); draw(); });
+  window.addEventListener("load", () => { layout(); draw(); });
+  window.addEventListener("orientationchange", () => { layout(); draw(); });
+
+  const ro = new ResizeObserver(() => { layout(); draw(); });
+  ro.observe(cvX);
+
+  // ---- init ----
+  layout();
+  setDir(1);
+  syncPlayBtn();
+  syncOpts();
+  refreshReadouts();
+  requestAnimationFrame(loop);
+})();
+</script>
