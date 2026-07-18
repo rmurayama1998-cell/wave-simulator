@@ -1,0 +1,980 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>縦波の横波表示 変換ツール</title>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #f8fafc;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --ink-faint: #94a3b8;
+    --line: #e2e8f0;
+    --grid: #eef2f6;
+    --axis: #cbd5e1;
+    --wave: #4f46e5;
+    --wave-soft: #c7d2fe;
+    --particle: #f43f5e;
+    --accent: #0ea5e9;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, .25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    gap: 14px;
+  }
+  .left {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .graph-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    padding-bottom: 12px;
+  }
+  .graph-card canvas { flex: 1 1 auto; min-height: 0; height: auto; }
+  .right { min-height: 0; }
+  .right .card { height: 100%; margin-bottom: 0; overflow: auto; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 767px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100dvh; }
+    .main { grid-template-columns: 1fr; }
+    .graph-card { min-height: 210px; }
+    .right .card { height: auto; }
+  }
+  header.top h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    margin: 0;
+  }
+  header.top .sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px 10px;
+    margin-bottom: 14px;
+  }
+
+  .graph-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .graph-head .name { font-size: 14px; font-weight: 700; }
+  .graph-head .desc { font-size: 12px; color: var(--ink-faint); }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+  .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--particle);
+    box-shadow: 0 0 0 3px rgba(244, 63, 94, .18);
+  }
+
+  canvas { width: 100%; display: block; border-radius: 10px; touch-action: none; }
+
+  .controls .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px 22px;
+  }
+  .ctl { padding: 0 2px; }
+  .ctl .label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .ctl .label .k { font-size: 14px; font-weight: 700; }
+  .ctl .label .k small { font-weight: 500; color: var(--ink-faint); margin-left: 4px; }
+  .ctl .label .v {
+    font-variant-numeric: tabular-nums;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--wave);
+  }
+  .ctl .label .v .u { font-size: 12px; font-weight: 600; color: var(--ink-faint); margin-left: 2px; }
+  .ctl .subhint { margin-top: 2px; font-size: 11px; color: var(--ink-faint); }
+
+  .frow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+  .opts { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    cursor: pointer;
+    min-height: 26px;
+  }
+  .opt input { flex: none; width: 18px; height: 18px; accent-color: var(--wave); cursor: pointer; }
+
+  .legend { display: flex; gap: 14px; padding-left: 26px; font-size: 12px; color: var(--ink-soft); }
+  .legend .chip { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 34px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 28px; height: 28px;
+    margin-top: -11px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--wave);
+    box-shadow: 0 3px 8px -1px rgba(79, 70, 229, .45);
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-moz-range-thumb {
+    width: 26px; height: 26px; border: 2px solid var(--wave);
+    background: #fff; border-radius: 50%;
+  }
+
+  .speed {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff);
+    border: 1px solid #dbeafe;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .speed .formula { font-size: 17px; font-weight: 700; letter-spacing: .01em; }
+  .speed .formula .op { color: var(--ink-faint); margin: 0 4px; }
+  .speed .formula .var-f { color: var(--accent); }
+  .speed .formula .var-l { color: var(--wave); }
+  .speed .formula .var-v { color: var(--ink); }
+  .speed .nums { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--ink-soft); }
+  .speed .nums b { color: var(--ink); font-size: 14px; }
+
+  .btns { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+  button.b {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: 11px;
+    cursor: pointer;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button.b:active { transform: scale(.96); }
+  button.b.primary {
+    background: var(--wave);
+    border-color: var(--wave);
+    color: #fff;
+    box-shadow: 0 6px 16px -6px rgba(79, 70, 229, .6);
+  }
+  .seg { display: inline-flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .seg button {
+    border: none;
+    background: #fff;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 44px;
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+  .seg button.on { background: var(--wave); color: #fff; }
+
+  .right .btns { flex-direction: column; align-items: stretch; }
+  .btnrow { display: flex; gap: 10px; }
+  .btnrow .b { flex: 1; justify-content: center; }
+  .btnrow #bPlay { flex: 2; justify-content: center; }
+  .btnrow #bReset { flex: 1; justify-content: center; }
+  .right .seg { width: 100%; }
+  .right .seg button { flex: 1; }
+
+  /* conversion-procedure mode */
+  .modeseg { margin-bottom: 8px; }
+  .modeseg button { min-height: 38px; }
+  .b.stage { width: 100%; justify-content: flex-start; }
+  .b.stage.on {
+    border-color: var(--wave);
+    color: var(--wave);
+    background: #eef2ff;
+    font-weight: 700;
+  }
+  .hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  body.convmode .left { justify-content: center; }
+  body.convmode #cardP { flex: 0 1 360px; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>縦波の横波表示 変換ツール</h1>
+    <span class="sub">媒質の動きを、教科書でおなじみの横波表示グラフに変換してみよう</span>
+  </header>
+
+  <div class="main">
+   <div class="left">
+    <div class="card graph-card" id="cardP">
+      <div class="graph-head">
+        <div>
+          <span class="name" id="headName">① 縦波：媒質の動き</span>
+          <span class="desc" id="headDesc">　実際の粒子の動き（左右にのみ振動）</span>
+        </div>
+        <span class="badge" id="headBadge"><span class="dot"></span>粒子をタップ → 注目する点をえらぶ</span>
+      </div>
+      <canvas id="cvP"></canvas>
+    </div>
+
+    <div class="card graph-card" id="cardG">
+      <div class="graph-head">
+        <div>
+          <span class="name">② 横波表示（変換したグラフ）</span>
+          <span class="desc">　横軸 = 位置 x、縦軸 = x方向の変位 s</span>
+        </div>
+      </div>
+      <canvas id="cvG"></canvas>
+    </div>
+   </div>
+
+   <aside class="right">
+  <div class="card controls">
+    <div class="seg modeseg" id="segMode">
+      <button data-m="anim" class="on">アニメーション</button>
+      <button data-m="conv">変換のしくみ</button>
+    </div>
+
+    <div id="animCtls">
+    <div class="row">
+      <div class="ctl">
+        <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="vA">0.20</span><span class="u">m</span></span></div>
+        <input type="range" id="rA" min="0" max="0.4" step="0.01" value="0.2">
+        <div class="subhint" id="ampHint"></div>
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="vL">2.5</span><span class="u">m</span></span></div>
+        <input type="range" id="rL" min="1" max="5" step="0.1" value="2.5">
+      </div>
+      <div class="ctl">
+        <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="vF">0.50</span><span class="u">Hz</span></span></div>
+        <input type="range" id="rF" min="0.1" max="1.5" step="0.05" value="0.5">
+      </div>
+    </div>
+
+    <div class="opts">
+      <label class="opt"><input type="checkbox" id="cDensity"><span>疎密を色分け表示</span></label>
+      <div class="legend">
+        <span class="chip"><span class="sw" style="background:#ef4444"></span>密（せまい）</span>
+        <span class="chip"><span class="sw" style="background:#60a5fa"></span>疎（広い）</span>
+      </div>
+    </div>
+
+    <div class="speed" id="speedBox">
+      <div class="frow">
+        <span class="formula">
+          <span class="var-v">v</span><span class="op">=</span><span class="var-f">f</span><span class="op">×</span><span class="var-l">λ</span>
+        </span>
+        <span class="nums" id="vNums"></span>
+      </div>
+      <div class="frow">
+        <span class="formula">
+          <span class="var-v">T</span><span class="op">=</span><span class="op">1/</span><span class="var-f">f</span>
+        </span>
+        <span class="nums" id="tNums"></span>
+      </div>
+    </div>
+
+    <div class="btns">
+      <div class="btnrow">
+        <button class="b primary" id="bPlay">⏸ 一時停止</button>
+        <button class="b" id="bReset">↺ リセット</button>
+      </div>
+      <div class="seg" id="segDir">
+        <button data-dir="1" class="on">→ 右へ進む</button>
+        <button data-dir="-1">← 左へ進む</button>
+      </div>
+    </div>
+    </div>
+
+    <div id="convCtls" style="display:none">
+      <div class="hint" id="convLabel">① 初期状態：媒質の粒子は等間隔に並んでいる</div>
+      <div class="btns">
+        <button class="b stage on" data-s="0">① 初期状態</button>
+        <button class="b stage" data-s="1">② 変位を矢印で表す</button>
+        <button class="b stage" data-s="2">③ 1個ずつ90°回転</button>
+        <button class="b stage" data-s="3">④ 先端をつないで横波表示</button>
+        <div class="btnrow">
+          <button class="b" id="bConvStep">⏭ 1個すすめる</button>
+          <button class="b primary" id="bConvAuto">▶ 通しで見る</button>
+        </div>
+      </div>
+      <div class="legend" style="padding-left:0; margin-top:12px">
+        <span class="chip"><span class="sw" style="background:#e34948"></span>右向きの変位</span>
+        <span class="chip"><span class="sw" style="background:#2a78d6"></span>左向きの変位</span>
+      </div>
+      <div class="hint">○ = 元の位置　● = 媒質の粒子</div>
+    </div>
+  </div>
+   </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- state ----
+  const state = {
+    A: 0.20,        // amplitude (m) — capped dynamically so particles never cross
+    lambda: 2.5,    // wavelength (m)
+    f: 0.5,         // frequency (Hz)
+    dir: 1,         // +1 right, -1 left
+    playing: true,
+    t: 0,           // time (s)
+    selIdx: 0,      // index of the highlighted particle
+    showDensity: false,
+  };
+
+  const WORLD_W = 10;        // visible x-range (m)
+  const DOT_GAP = 0.15;      // equilibrium spacing between medium particles (m)
+  const N_DOTS = Math.floor(WORLD_W / DOT_GAP);   // 66 -> 67 particles (0..9.9 m)
+  const AMP_SAFETY = 0.85;   // keeps max |ds/dx| < 1 so particles never overtake a neighbour
+  const DISPLAY_AMP_MAX = 0.4; // fixed vertical scale (m) for graph ②, independent of the cap
+
+  function ampMax(lambda) {
+    return Math.min(DISPLAY_AMP_MAX, AMP_SAFETY * lambda / (2 * Math.PI));
+  }
+
+  // ---- conversion-procedure mode (変換のしくみ) ----
+  // Fixed teaching configuration, independent of the sliders: one wavelength
+  // across the view, amplitude below the particle spacing so every particle
+  // stays visually next to its own equilibrium ring.
+  const C_WORLD = 8, C_LAM = 8, C_A = 0.4, C_GAP = 0.5;
+  const C_N = Math.round(C_WORLD / C_GAP);
+  const C_ROT = 0.55;             // seconds per arrow rotation
+  const CONV_RIGHT = "#e34948";   // rightward displacement
+  const CONV_LEFT = "#2a78d6";    // leftward displacement
+  let appMode = "anim";
+  const conv = { mode: 0, dispP: 0, rotIdx: 0, rotTarget: 0, conn: 0, auto: false };
+  function convDisp(x0) { return C_A * Math.sin(2 * Math.PI * x0 / C_LAM); }
+  function easeQ(p) { return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; }
+  const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+  state.selIdx = Math.min(N_DOTS, Math.round(5 / DOT_GAP));
+
+  // ---- canvases ----
+  const cvP = document.getElementById("cvP");
+  const cvG = document.getElementById("cvG");
+  const ctxP = cvP.getContext("2d");
+  const ctxG = cvG.getContext("2d");
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  function sizeCanvas(cv, ctx) {
+    const cssW = cv.clientWidth;
+    const cssH = cv.clientHeight;
+    cv.width = Math.max(1, Math.round(cssW * dpr));
+    cv.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+  let dimP, dimG;
+  function layout() {
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    dimP = sizeCanvas(cvP, ctxP);
+    dimG = sizeCanvas(cvG, ctxG);
+  }
+
+  // ---- longitudinal wave physics ----
+  // s(x0,t) is the displacement (along x) of the particle whose equilibrium
+  // position is x0. Plotting s vertically against x0 is exactly the textbook
+  // "横波表示" conversion.
+  function phase(x0, t) {
+    return 2 * Math.PI * (x0 / state.lambda - state.dir * state.f * t);
+  }
+  function dispAt(x0, t) {
+    return state.A * Math.sin(phase(x0, t));
+  }
+  function velSignAt(x0, t) {
+    const v = -2 * Math.PI * state.f * state.dir * state.A * Math.cos(phase(x0, t));
+    if (Math.abs(v) < 1e-6) return 0;
+    return v > 0 ? 1 : -1;
+  }
+  // Compression: local density change is -ds/dx0. Normalizing by AMP_SAFETY
+  // (the strain magnitude at the amplitude cap) means the color always spans
+  // its full range at the current amplitude's physical limit, and fades
+  // toward neutral as A -> 0.
+  function compressionAt(x0, t) {
+    if (state.A <= 0) return 0;
+    const strain = -state.A * (2 * Math.PI / state.lambda) * Math.cos(phase(x0, t));
+    return Math.max(-1, Math.min(1, strain / AMP_SAFETY));
+  }
+
+  // ---- color ----
+  const NEUTRAL_BAND = [255, 255, 255];
+  const NEUTRAL_DOT = [79, 70, 229];   // indigo, matches the line color
+  const COMP_COLOR = [239, 68, 68];    // compression (密)
+  const RARE_COLOR = [96, 165, 250];   // rarefaction (疎)
+  function lerpRGB(a, b, f) { return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * f)); }
+  function bandColor(t) { return t >= 0 ? lerpRGB(NEUTRAL_BAND, COMP_COLOR, t) : lerpRGB(NEUTRAL_BAND, RARE_COLOR, -t); }
+  function dotColor(t) { return t >= 0 ? lerpRGB(NEUTRAL_DOT, COMP_COLOR, t) : lerpRGB(NEUTRAL_DOT, RARE_COLOR, -t); }
+
+  // ---- drawing helpers ----
+  function bg(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, w, h);
+  }
+  function frame(ctx, w, h) {
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+  }
+  function axisLite(ctx, w, h, ticks) {
+    const innerW = w - 2 * PAD;
+    ctx.strokeStyle = "#eef2f6";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= ticks; i++) {
+      const x = PAD + (innerW * i) / ticks;
+      ctx.moveTo(x, 0); ctx.lineTo(x, h);
+    }
+    ctx.stroke();
+  }
+  function axis(ctx, w, h, ticks) {
+    const midY = h / 2;
+    const ampPx = h / 2 - 14;
+    axisLite(ctx, w, h, ticks);
+    ctx.strokeStyle = "#e2e8f0";
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, midY - ampPx); ctx.lineTo(w, midY - ampPx);
+    ctx.moveTo(0, midY + ampPx); ctx.lineTo(w, midY + ampPx);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
+  }
+  function numLabel(ctx, text, x, y, align, color) {
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width;
+    const padX = 3;
+    let bx = x - padX;
+    if (align === "center") bx = x - tw / 2 - padX;
+    else if (align === "right") bx = x - tw - padX;
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillRect(bx, y - 8, tw + padX * 2, 16);
+    ctx.fillStyle = color || "#64748b";
+    ctx.textAlign = align === "center" ? "center" : (align === "right" ? "right" : "left");
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function timeChip(ctx, w, text) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 22, bh = 28;
+    const bx = w - PAD - bw, by = 7;
+    roundRectPath(ctx, bx, by, bw, bh, 9);
+    ctx.fillStyle = "rgba(15,23,42,0.88)";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+  }
+
+  const PAD = 10;
+
+  function drawParticles() {
+    const { w, h } = dimP;
+    bg(ctxP, w, h);
+    const midY = h / 2;
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+    axisLite(ctxP, w, h, Math.round(WORLD_W));
+
+    if (state.showDensity) {
+      for (let i = 0; i < N_DOTS; i++) {
+        const x0a = i * DOT_GAP, x0b = (i + 1) * DOT_GAP;
+        const c = bandColor(compressionAt((x0a + x0b) / 2, state.t));
+        ctxP.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.55)`;
+        ctxP.fillRect(x2px(x0a), 0, x2px(x0b) - x2px(x0a), h);
+      }
+    }
+
+    ctxP.strokeStyle = "#cbd5e1";
+    ctxP.lineWidth = 1.25;
+    ctxP.beginPath(); ctxP.moveTo(PAD, midY); ctxP.lineTo(w - PAD, midY); ctxP.stroke();
+
+    for (let i = 0; i <= N_DOTS; i++) {
+      const x0 = i * DOT_GAP;
+      const px = x2px(x0 + dispAt(x0, state.t));
+      const isSel = i === state.selIdx;
+      let fill;
+      if (isSel) fill = "#f43f5e";
+      else if (state.showDensity) { const c = dotColor(compressionAt(x0, state.t)); fill = `rgb(${c[0]},${c[1]},${c[2]})`; }
+      else fill = "#4f46e5";
+      ctxP.fillStyle = fill;
+      ctxP.beginPath();
+      ctxP.arc(px, midY, isSel ? 6.5 : 3.5, 0, 7);
+      ctxP.fill();
+      if (isSel) {
+        ctxP.strokeStyle = "rgba(244,63,94,.28)";
+        ctxP.lineWidth = 5;
+        ctxP.beginPath(); ctxP.arc(px, midY, 6.5, 0, 7); ctxP.stroke();
+      }
+    }
+
+    {
+      const x0 = state.selIdx * DOT_GAP;
+      const s = dispAt(x0, state.t);
+      const vSign = velSignAt(x0, state.t);
+      const arrow = vSign > 0 ? "→" : (vSign < 0 ? "←" : "・");
+      const label = "s = " + (s >= 0 ? "+" : "") + s.toFixed(2) + " m  " + arrow;
+      const px = x2px(x0 + s);
+      numLabel(ctxP, label, Math.min(Math.max(px, PAD + 44), w - PAD - 44), Math.max(24, midY - 24), "center", "#0f172a");
+    }
+
+    numLabel(ctxP, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+    timeChip(ctxP, w, "t = " + state.t.toFixed(2) + " s");
+    frame(ctxP, w, h);
+  }
+
+  function drawGraph() {
+    const { w, h } = dimG;
+    bg(ctxG, w, h);
+    const midY = h / 2;
+    const ampPx = h / 2 - 14;   // represents DISPLAY_AMP_MAX metres, fixed regardless of A
+    axis(ctxG, w, h, Math.round(WORLD_W));
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+
+    if (state.showDensity) {
+      for (let i = 0; i < N_DOTS; i++) {
+        const x0a = i * DOT_GAP, x0b = (i + 1) * DOT_GAP;
+        const c = bandColor(compressionAt((x0a + x0b) / 2, state.t));
+        ctxG.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
+        ctxG.fillRect(x2px(x0a), 0, x2px(x0b) - x2px(x0a), h);
+      }
+    }
+
+    ctxG.beginPath();
+    for (let px = PAD; px <= w - PAD; px++) {
+      const x0 = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+      const y = midY - (dispAt(x0, state.t) / DISPLAY_AMP_MAX) * ampPx;
+      if (px === PAD) ctxG.moveTo(px, y); else ctxG.lineTo(px, y);
+    }
+    ctxG.strokeStyle = "#4f46e5";
+    ctxG.lineWidth = 3;
+    ctxG.lineJoin = "round";
+    ctxG.stroke();
+
+    {
+      const x0 = state.selIdx * DOT_GAP;
+      const s = dispAt(x0, state.t);
+      const px0 = x2px(x0);
+      const py0 = midY - (s / DISPLAY_AMP_MAX) * ampPx;
+      ctxG.strokeStyle = "rgba(244,63,94,.35)";
+      ctxG.lineWidth = 1.5;
+      ctxG.setLineDash([4, 4]);
+      ctxG.beginPath(); ctxG.moveTo(px0, midY); ctxG.lineTo(px0, py0); ctxG.stroke();
+      ctxG.beginPath(); ctxG.moveTo(px0, py0); ctxG.lineTo(w - PAD, py0); ctxG.stroke();
+      ctxG.setLineDash([]);
+      ctxG.fillStyle = "#f43f5e";
+      ctxG.beginPath(); ctxG.arc(px0, py0, 8, 0, 7); ctxG.fill();
+      ctxG.strokeStyle = "rgba(244,63,94,.25)";
+      ctxG.lineWidth = 6;
+      ctxG.beginPath(); ctxG.arc(px0, py0, 8, 0, 7); ctxG.stroke();
+    }
+
+    numLabel(ctxG, "+" + DISPLAY_AMP_MAX.toFixed(1) + " m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxG, "0", PAD + 2, midY, "left");
+    numLabel(ctxG, "−" + DISPLAY_AMP_MAX.toFixed(1) + " m", PAD + 2, midY + ampPx, "left");
+    for (let xw = 2; xw <= WORLD_W; xw += 2) numLabel(ctxG, String(xw), x2px(xw), midY + 11, "center");
+    numLabel(ctxG, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    frame(ctxG, w, h);
+  }
+
+  // arrow with a filled head, used by the conversion-procedure drawing
+  function arrowLine(ctx, x1, y1, x2, y2, color, width, alpha) {
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    if (len < 2) return;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = width;
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const hs = Math.min(9, 4 + len * 0.12);
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x2 - hs * 0.6 * Math.cos(ang), y2 - hs * 0.6 * Math.sin(ang));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - hs * Math.cos(ang - 0.42), y2 - hs * Math.sin(ang - 0.42));
+    ctx.lineTo(x2 - hs * Math.cos(ang + 0.42), y2 - hs * Math.sin(ang + 0.42));
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawConv() {
+    const { w, h } = dimP;
+    bg(ctxP, w, h);
+    const midY = h / 2;
+    // one shared scale for both axes, so the arrow keeps its length when it
+    // rotates from horizontal (displacement) to vertical (graph value)
+    const pxPerM = (w - 2 * PAD) / C_WORLD;
+    const x2px = (x) => PAD + x * pxPerM;
+    const sPx = (s) => s * pxPerM;
+    const dp = easeQ(conv.dispP);
+
+    ctxP.strokeStyle = "#eef2f6";
+    ctxP.lineWidth = 1;
+    ctxP.beginPath();
+    for (let x = 0; x <= C_WORLD; x++) { ctxP.moveTo(x2px(x), 0); ctxP.lineTo(x2px(x), h); }
+    ctxP.stroke();
+    ctxP.strokeStyle = "#cbd5e1";
+    ctxP.lineWidth = 1.25;
+    ctxP.beginPath(); ctxP.moveTo(PAD, midY); ctxP.lineTo(w - PAD, midY); ctxP.stroke();
+
+    for (let i = 0; i <= C_N; i++) {
+      const x0 = i * C_GAP;
+      const s = convDisp(x0);
+      const magPx = Math.abs(sPx(s));
+      const sign = s >= 0 ? 1 : -1;
+      const col = sign > 0 ? CONV_RIGHT : CONV_LEFT;
+      const x0px = x2px(x0);
+      const partX = x0px + sPx(s) * dp;
+      const p = easeQ(clamp01(conv.rotIdx - i));
+      const rotating = conv.rotIdx - i > 0 && conv.rotIdx - i < 1;
+
+      if (rotating && magPx > 1) {
+        ctxP.fillStyle = "rgba(227,73,72,.12)";
+        ctxP.beginPath(); ctxP.arc(x0px, midY, magPx + 12, 0, 7); ctxP.fill();
+      }
+
+      // equilibrium ring (元の位置)
+      ctxP.strokeStyle = "#94a3b8";
+      ctxP.lineWidth = 1.3;
+      ctxP.beginPath(); ctxP.arc(x0px, midY, 3.5, 0, 7); ctxP.stroke();
+
+      if (dp > 0 && magPx > 1) {
+        const a0 = sign > 0 ? 0 : Math.PI;
+        const a1 = sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+        const curMag = magPx * dp;
+        if (p > 0) arrowLine(ctxP, x0px, midY, x0px + sPx(s) * dp, midY, col, 1.8, 0.22);
+        if (rotating) {
+          // rotation guide: only the short 90° side of the circle
+          ctxP.strokeStyle = "rgba(15,23,42,.38)";
+          ctxP.lineWidth = 1;
+          ctxP.setLineDash([3, 3]);
+          ctxP.beginPath();
+          ctxP.arc(x0px, midY, curMag, a1, a0);
+          ctxP.stroke();
+          ctxP.setLineDash([]);
+        }
+        const ang = a0 + (a1 - a0) * p;
+        arrowLine(ctxP, x0px, midY, x0px + curMag * Math.cos(ang), midY + curMag * Math.sin(ang), col, rotating ? 3 : 2.4, 1);
+      }
+
+      ctxP.fillStyle = "#64748b";
+      ctxP.beginPath(); ctxP.arc(partX, midY, 4, 0, 7); ctxP.fill();
+    }
+
+    if (conv.conn > 0) {
+      ctxP.strokeStyle = "#4f46e5";
+      ctxP.lineWidth = 2.5;
+      ctxP.lineJoin = "round";
+      ctxP.beginPath();
+      const lastX = PAD + (w - 2 * PAD) * conv.conn;
+      let started = false;
+      for (let px = PAD; px <= lastX; px++) {
+        const x0 = (px - PAD) / pxPerM;
+        const y = midY - sPx(convDisp(x0));
+        if (!started) { ctxP.moveTo(px, y); started = true; } else ctxP.lineTo(px, y);
+      }
+      ctxP.stroke();
+    }
+
+    for (let x = 2; x <= C_WORLD; x += 2) numLabel(ctxP, String(x), x2px(x), midY + 13, "center");
+    numLabel(ctxP, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+    frame(ctxP, w, h);
+  }
+
+  function stepConv(dt) {
+    const dTarget = conv.mode >= 1 ? 1 : 0;
+    if (conv.dispP !== dTarget) conv.dispP = clamp01(conv.dispP + Math.sign(dTarget - conv.dispP) * dt / 0.8);
+    if (conv.mode >= 2 && conv.dispP >= 1 && conv.rotIdx < conv.rotTarget) {
+      // zero-displacement arrows have nothing to rotate; skip them quickly
+      const zero = Math.abs(convDisp(Math.floor(conv.rotIdx) * C_GAP)) < 0.02;
+      conv.rotIdx = Math.min(conv.rotTarget, conv.rotIdx + dt / (zero ? 0.1 : C_ROT));
+    }
+    if (conv.mode < 2 && conv.rotIdx > 0) conv.rotIdx = Math.max(0, conv.rotIdx - dt * 8);
+    const cTarget = (conv.mode === 3 && conv.rotIdx >= C_N + 1) ? 1 : 0;
+    if (conv.conn !== cTarget) conv.conn = clamp01(conv.conn + Math.sign(cTarget - conv.conn) * dt / (cTarget ? 1.4 : 0.25));
+    if (conv.auto) {
+      if (conv.mode === 1 && conv.dispP >= 1) { conv.mode = 2; conv.rotTarget = C_N + 1; syncConvUI(2); }
+      else if (conv.mode === 2 && conv.rotIdx >= C_N + 1) { conv.auto = false; goToConv(3); }
+    }
+  }
+
+  function draw() {
+    if (appMode === "conv") drawConv();
+    else { drawParticles(); drawGraph(); }
+  }
+
+  let last = null;
+  function loop(ts) {
+    if (last == null) last = ts;
+    const dt = Math.min(0.05, (ts - last) / 1000);
+    last = ts;
+    if (appMode === "anim") { if (state.playing) state.t += dt; }
+    else stepConv(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- UI wiring ----
+  const vA = document.getElementById("vA");
+  const vL = document.getElementById("vL");
+  const vF = document.getElementById("vF");
+  const rA = document.getElementById("rA");
+  const rL = document.getElementById("rL");
+  const rF = document.getElementById("rF");
+  const vNums = document.getElementById("vNums");
+  const tNums = document.getElementById("tNums");
+  const ampHint = document.getElementById("ampHint");
+
+  function updateAmpCap() {
+    const cap = ampMax(state.lambda);
+    rA.max = cap.toFixed(2);
+    if (state.A > cap) { state.A = cap; rA.value = cap.toFixed(2); }
+    ampHint.textContent = "上限 " + cap.toFixed(2) + " m（波長が短いほど、粒子が重ならないよう自動的に下がります）";
+  }
+
+  function refreshReadouts() {
+    vA.textContent = state.A.toFixed(2);
+    vL.textContent = state.lambda.toFixed(1);
+    vF.textContent = state.f.toFixed(2);
+    const v = state.f * state.lambda;
+    const T = 1 / state.f;
+    vNums.innerHTML =
+      '= <span style="color:var(--accent)">' + state.f.toFixed(2) + ' Hz</span> × ' +
+      '<span style="color:var(--wave)">' + state.lambda.toFixed(1) + ' m</span> = ' +
+      '<b>' + v.toFixed(2) + ' m/s</b>　<span style="color:var(--ink-faint)">波の速さ</span>';
+    tNums.innerHTML =
+      '= 1 / <span style="color:var(--accent)">' + state.f.toFixed(2) + ' Hz</span> = ' +
+      '<b>' + T.toFixed(2) + ' s</b>　<span style="color:var(--ink-faint)">周期</span>';
+  }
+
+  const cDensity = document.getElementById("cDensity");
+  function syncOpts() { state.showDensity = cDensity.checked; }
+  cDensity.addEventListener("change", syncOpts);
+
+  rA.addEventListener("input", () => { state.A = +rA.value; refreshReadouts(); });
+  rL.addEventListener("input", () => { state.lambda = +rL.value; updateAmpCap(); refreshReadouts(); });
+  rF.addEventListener("input", () => { state.f = +rF.value; refreshReadouts(); });
+
+  const bPlay = document.getElementById("bPlay");
+  function syncPlayBtn() {
+    bPlay.textContent = state.playing ? "⏸ 一時停止" : "▶ 再生";
+    bPlay.classList.add("primary");
+  }
+  bPlay.addEventListener("click", () => {
+    state.playing = !state.playing;
+    syncPlayBtn();
+  });
+
+  document.getElementById("bReset").addEventListener("click", () => {
+    state.t = 0;
+    state.A = 0.20; state.lambda = 2.5; state.f = 0.5; state.dir = 1;
+    state.selIdx = Math.min(N_DOTS, Math.round(5 / DOT_GAP));
+    rL.value = 2.5; rF.value = 0.5;
+    updateAmpCap();
+    rA.value = 0.20;
+    setDir(1);
+    state.playing = true;
+    syncPlayBtn();
+    refreshReadouts();
+  });
+
+  const segDir = document.getElementById("segDir");
+  function setDir(d) {
+    state.dir = d;
+    [...segDir.children].forEach(btn => btn.classList.toggle("on", +btn.dataset.dir === d));
+  }
+  segDir.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (btn) setDir(+btn.dataset.dir);
+  });
+
+  // ---- mode switch & conversion-procedure controls ----
+  const segMode = document.getElementById("segMode");
+  const animCtls = document.getElementById("animCtls");
+  const convCtls = document.getElementById("convCtls");
+  const cardG = document.getElementById("cardG");
+  const headName = document.getElementById("headName");
+  const headDesc = document.getElementById("headDesc");
+  const headBadge = document.getElementById("headBadge");
+  const convLabel = document.getElementById("convLabel");
+  const CONV_LABELS = [
+    "① 初期状態：媒質の粒子は等間隔に並んでいる",
+    "② 縦波が伝わると各粒子がずれる。元の位置→粒子の矢印で変位を表す",
+    "③ 左の粒子から1個ずつ、矢印を90°回転（右向き→上、左向き→下）",
+    "④ 縦になった矢印の先端をつなぐと、横波表示のグラフになる",
+  ];
+  function syncConvUI(s) {
+    convCtls.querySelectorAll(".b.stage").forEach((b) => b.classList.toggle("on", +b.dataset.s === s));
+    convLabel.textContent = CONV_LABELS[s];
+  }
+  function goToConv(s) {
+    conv.mode = s;
+    if (s >= 2) conv.rotTarget = s >= 3 ? C_N + 1 : (conv.rotTarget > 0 ? conv.rotTarget : C_N + 1);
+    else conv.rotTarget = 0;
+    syncConvUI(s);
+  }
+  convCtls.querySelectorAll(".b.stage").forEach((b) => {
+    b.addEventListener("click", () => { conv.auto = false; goToConv(+b.dataset.s); });
+  });
+  document.getElementById("bConvStep").addEventListener("click", () => {
+    conv.auto = false;
+    if (conv.mode < 1) { goToConv(1); return; }
+    if (conv.mode < 2 || conv.rotIdx >= C_N + 1) {
+      if (conv.rotIdx >= C_N + 1) { goToConv(3); return; }
+      conv.mode = 2; conv.rotTarget = 1; syncConvUI(2); return;
+    }
+    conv.rotTarget = Math.min(C_N + 1, Math.floor(conv.rotIdx + 1e-4) + 1);
+  });
+  document.getElementById("bConvAuto").addEventListener("click", () => {
+    conv.dispP = 0; conv.rotIdx = 0; conv.rotTarget = 0; conv.conn = 0; conv.auto = true;
+    goToConv(1);
+  });
+  function setAppMode(m) {
+    appMode = m;
+    [...segMode.children].forEach((b) => b.classList.toggle("on", b.dataset.m === m));
+    const isConv = m === "conv";
+    document.body.classList.toggle("convmode", isConv);
+    animCtls.style.display = isConv ? "none" : "";
+    convCtls.style.display = isConv ? "" : "none";
+    cardG.style.display = isConv ? "none" : "";
+    headName.textContent = isConv ? "変換のしくみ：縦波 → 横波表示" : "① 縦波：媒質の動き";
+    headDesc.textContent = isConv ? "　右のボタンで ①→④ の順にすすめよう" : "　実際の粒子の動き（左右にのみ振動）";
+    headBadge.style.display = isConv ? "none" : "";
+    if (isConv) {
+      conv.mode = 0; conv.dispP = 0; conv.rotIdx = 0; conv.rotTarget = 0; conv.conn = 0; conv.auto = false;
+      syncConvUI(0);
+    }
+    layout();
+    draw();
+  }
+  segMode.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (b) setAppMode(b.dataset.m);
+  });
+
+  // tap on the particle row to pick the highlighted particle (nearest by
+  // equilibrium position, not by its currently displaced position)
+  function pickFromEvent(e) {
+    if (appMode === "conv") return;   // no particle picking in procedure mode
+    const rect = cvP.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const px = clientX - rect.left;
+    const inner = rect.width - 2 * PAD;
+    let xw = ((px - PAD) / inner) * WORLD_W;
+    xw = Math.max(0, Math.min(WORLD_W, xw));
+    state.selIdx = Math.max(0, Math.min(N_DOTS, Math.round(xw / DOT_GAP)));
+  }
+  cvP.addEventListener("pointerdown", pickFromEvent);
+  cvP.addEventListener("pointermove", (e) => { if (e.pressure > 0 || e.buttons) pickFromEvent(e); });
+
+  window.addEventListener("resize", () => { layout(); draw(); });
+  window.addEventListener("load", () => { layout(); draw(); });
+  window.addEventListener("orientationchange", () => { layout(); draw(); });
+
+  const ro = new ResizeObserver(() => { layout(); draw(); });
+  ro.observe(cvP);
+  ro.observe(cvG);
+
+  // ---- init ----
+  layout();
+  setDir(1);
+  syncPlayBtn();
+  syncOpts();
+  updateAmpCap();
+  refreshReadouts();
+  requestAnimationFrame(loop);
+})();
+</script>
