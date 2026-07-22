@@ -1,0 +1,949 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>重ね合わせ・反射・定常波</title>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #f8fafc;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --ink-faint: #94a3b8;
+    --line: #e2e8f0;
+    --grid: #eef2f6;
+    --axis: #cbd5e1;
+    --wave: #4f46e5;
+    --wave-soft: #c7d2fe;
+    --particle: #f43f5e;
+    --accent: #0ea5e9;
+    --secondary: #f59e0b;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, .25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    gap: 14px;
+  }
+  .left {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .graph-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+    padding-bottom: 12px;
+  }
+  .graph-card canvas { flex: 1 1 auto; min-height: 0; height: auto; }
+  .right { min-height: 0; }
+  .right .card { height: 100%; margin-bottom: 0; overflow: auto; }
+
+  header.top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 767px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100dvh; }
+    .main { grid-template-columns: 1fr; }
+    .graph-card { min-height: 260px; }
+    .right .card { height: auto; }
+  }
+  header.top h1 { font-size: 20px; font-weight: 700; letter-spacing: .02em; margin: 0; }
+  header.top .sub { font-size: 13px; color: var(--ink-soft); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px 8px;
+    margin-bottom: 14px;
+  }
+
+  .graph-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 4px; }
+  .graph-head .name { font-size: 14px; font-weight: 700; }
+  .graph-head .desc { font-size: 12px; color: var(--ink-faint); }
+
+  canvas { width: 100%; display: block; border-radius: 10px; touch-action: none; }
+
+  .controls .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 6px 16px;
+  }
+  .ctl { padding: 0 2px; }
+  .ctl .label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .ctl .label .k { font-size: 13px; font-weight: 700; }
+  .ctl .label .k small { font-weight: 500; color: var(--ink-faint); margin-left: 4px; }
+  .ctl .label .v { font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 700; color: var(--wave); }
+  .ctl .label .v .u { font-size: 11px; font-weight: 600; color: var(--ink-faint); margin-left: 2px; }
+
+  .sechead {
+    margin: 6px 0 5px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .sechead:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+  .frow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+
+  .opts { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .opt { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); cursor: pointer; min-height: 24px; }
+  .opt input { flex: none; width: 17px; height: 17px; accent-color: var(--wave); cursor: pointer; }
+  .opt .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .opt .sw.dash { background-image: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); background-color: transparent; height: 2px; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px;
+    border-radius: 50%; background: #fff; border: 2px solid var(--wave);
+    box-shadow: 0 3px 8px -1px rgba(79, 70, 229, .45); cursor: pointer;
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 2px solid var(--wave); background: #fff; border-radius: 50%; }
+
+  .speed {
+    margin-top: 5px; padding: 5px 10px; border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff);
+    border: 1px solid #dbeafe; display: flex; flex-direction: column; gap: 5px;
+  }
+  .speed .formula { font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  .speed .formula .op { color: var(--ink-faint); margin: 0 3px; }
+  .speed .formula .var-f { color: var(--accent); }
+  .speed .formula .var-l { color: var(--wave); }
+  .speed .nums { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-soft); }
+  .speed .nums b { color: var(--ink); font-size: 13px; }
+
+  .btns { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  button.b {
+    appearance: none; border: 1px solid var(--line); background: #fff; color: var(--ink);
+    font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 11px; cursor: pointer;
+    min-height: 42px; display: inline-flex; align-items: center; gap: 6px;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button.b:active { transform: scale(.96); }
+  button.b.primary { background: var(--wave); border-color: var(--wave); color: #fff; box-shadow: 0 6px 16px -6px rgba(79, 70, 229, .6); }
+  .seg { display: flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .seg button { flex: 1; border: none; background: #fff; padding: 9px 8px; font-size: 12.5px; font-weight: 600; min-height: 42px; cursor: pointer; color: var(--ink-soft); }
+  .seg button.on { background: var(--wave); color: #fff; }
+
+  .right .btns { flex-direction: column; align-items: stretch; }
+  .btnrow { display: flex; gap: 8px; }
+  .btnrow #bPlay { flex: 2; justify-content: center; }
+  .btnrow #bReset { flex: 1; justify-content: center; }
+
+  .modeSeg { margin-bottom: 8px; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>重ね合わせ・反射・定常波</h1>
+    <span class="sub" id="headerSub">2つの波が出会うとどうなるかを見てみよう</span>
+  </header>
+
+  <div class="main">
+   <div class="left">
+    <div class="card graph-card">
+      <div class="graph-head">
+        <div>
+          <span class="name" id="graphName">① パルスの重ね合わせ</span>
+          <span class="desc" id="graphDesc">　横軸 = 位置 x</span>
+        </div>
+      </div>
+      <canvas id="cvW"></canvas>
+    </div>
+   </div>
+
+   <aside class="right">
+  <div class="card controls">
+    <div class="seg modeSeg" id="segMode">
+      <button data-mode="1" class="on">① 重ね合わせ</button>
+      <button data-mode="2">② 反射</button>
+      <button data-mode="3">③ 定常波</button>
+    </div>
+
+    <div id="mode1Ctls">
+      <div class="seg" id="segShape1">
+        <button data-shape="mountain" class="on">山型パルス</button>
+        <button data-shape="ku">く形パルス</button>
+        <button data-shape="continuous">連続波</button>
+      </div>
+
+      <div id="m1PulseCtls">
+        <div class="sechead">波の形</div>
+        <div class="row">
+          <div class="ctl">
+            <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="m1_vA">0.50</span><span class="u">m</span></span></div>
+            <input type="range" id="m1_rA" min="0.1" max="0.9" step="0.05" value="0.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">幅 <small>w</small></span><span class="v"><span id="m1_vW">1.0</span><span class="u">m</span></span></div>
+            <input type="range" id="m1_rW" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">速さ <small>v</small></span><span class="v"><span id="m1_vV">2.0</span><span class="u">m/s</span></span></div>
+            <input type="range" id="m1_rV" min="0.5" max="4.0" step="0.1" value="2.0">
+          </div>
+        </div>
+      </div>
+
+      <div id="m1ContCtls" style="display:none">
+        <div class="sechead">波の形</div>
+        <div class="row">
+          <div class="ctl">
+            <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="m1c_vA">0.50</span><span class="u">m</span></span></div>
+            <input type="range" id="m1c_rA" min="0.1" max="0.9" step="0.05" value="0.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="m1c_vL">2.5</span><span class="u">m</span></span></div>
+            <input type="range" id="m1c_rL" min="1" max="5" step="0.1" value="2.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="m1c_vF">0.80</span><span class="u">Hz</span></span></div>
+            <input type="range" id="m1c_rF" min="0.1" max="1.5" step="0.05" value="0.8">
+          </div>
+        </div>
+        <div class="speed">
+          <div class="frow">
+            <span class="formula"><span class="var-f">v</span><span class="op">=</span><span class="var-f">f</span><span class="op">×</span><span class="var-l">λ</span></span>
+            <span class="nums" id="m1c_vNums"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="m1_cInvert"><span>右から来る波を反転させる（山↔谷）</span></label>
+      </div>
+      <div class="btns">
+        <div class="btnrow">
+          <button class="b primary" id="m1_bPlay">⏸ 一時停止</button>
+          <button class="b" id="m1_bReset">↺ リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode2Ctls" style="display:none">
+      <div class="seg" id="segSrc">
+        <button data-src="pulse" class="on">パルス（1発）</button>
+        <button data-src="continuous">連続波</button>
+      </div>
+      <div class="seg" id="segEnd" style="margin-top:8px">
+        <button data-end="fixed" class="on">固定端</button>
+        <button data-end="free">自由端</button>
+      </div>
+
+      <div id="m2PulseCtls">
+        <div class="sechead">波の形</div>
+        <div class="row">
+          <div class="ctl">
+            <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="m2p_vA">0.50</span><span class="u">m</span></span></div>
+            <input type="range" id="m2p_rA" min="0.1" max="0.9" step="0.05" value="0.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">幅 <small>w</small></span><span class="v"><span id="m2p_vW">1.0</span><span class="u">m</span></span></div>
+            <input type="range" id="m2p_rW" min="0.5" max="2.0" step="0.1" value="1.0">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">速さ <small>v</small></span><span class="v"><span id="m2p_vV">2.0</span><span class="u">m/s</span></span></div>
+            <input type="range" id="m2p_rV" min="0.5" max="4.0" step="0.1" value="2.0">
+          </div>
+        </div>
+      </div>
+
+      <div id="m2ContCtls" style="display:none">
+        <div class="sechead">波の形</div>
+        <div class="row">
+          <div class="ctl">
+            <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="m2c_vA">0.50</span><span class="u">m</span></span></div>
+            <input type="range" id="m2c_rA" min="0.1" max="0.9" step="0.05" value="0.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="m2c_vL">2.5</span><span class="u">m</span></span></div>
+            <input type="range" id="m2c_rL" min="1" max="5" step="0.1" value="2.5">
+          </div>
+          <div class="ctl">
+            <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="m2c_vF">0.80</span><span class="u">Hz</span></span></div>
+            <input type="range" id="m2c_rF" min="0.1" max="1.5" step="0.05" value="0.8">
+          </div>
+        </div>
+        <div class="speed">
+          <div class="frow">
+            <span class="formula"><span class="var-f">v</span><span class="op">=</span><span class="var-f">f</span><span class="op">×</span><span class="var-l">λ</span></span>
+            <span class="nums" id="m2c_vNums"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sechead">表示</div>
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="m2_cInc" checked><span class="sw dash" style="color:var(--wave)"></span>入射波</label>
+        <label class="opt"><input type="checkbox" id="m2_cRefl" checked><span class="sw dash" style="color:var(--secondary)"></span>反射波</label>
+        <label class="opt"><input type="checkbox" id="m2_cSum" checked><span class="sw" style="background:var(--ink)"></span>合成波</label>
+      </div>
+
+      <div class="btns">
+        <div class="btnrow">
+          <button class="b primary" id="m2_bPlay">⏸ 一時停止</button>
+          <button class="b" id="m2_bReset">↺ リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="mode3Ctls" style="display:none">
+      <div class="seg" id="segEnd3">
+        <button data-end="fixed" class="on">固定端</button>
+        <button data-end="free">自由端</button>
+      </div>
+
+      <div class="sechead">波の形</div>
+      <div class="row">
+        <div class="ctl">
+          <div class="label"><span class="k">振幅 <small>A</small></span><span class="v"><span id="m3_vA">0.50</span><span class="u">m</span></span></div>
+          <input type="range" id="m3_rA" min="0.1" max="0.9" step="0.05" value="0.5">
+        </div>
+        <div class="ctl">
+          <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="m3_vL">2.5</span><span class="u">m</span></span></div>
+          <input type="range" id="m3_rL" min="1" max="5" step="0.1" value="2.5">
+        </div>
+        <div class="ctl">
+          <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="m3_vF">0.80</span><span class="u">Hz</span></span></div>
+          <input type="range" id="m3_rF" min="0.1" max="1.5" step="0.05" value="0.8">
+        </div>
+      </div>
+      <div class="speed">
+        <div class="frow">
+          <span class="formula"><span class="var-f">v</span><span class="op">=</span><span class="var-f">f</span><span class="op">×</span><span class="var-l">λ</span></span>
+          <span class="nums" id="m3_vNums"></span>
+        </div>
+        <div class="frow">
+          <span class="formula"><span class="var-f">T</span><span class="op">=</span><span class="op">1/</span><span class="var-f">f</span></span>
+          <span class="nums" id="m3_tNums"></span>
+        </div>
+      </div>
+
+      <div class="sechead">表示</div>
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="m3_cInc" checked><span class="sw dash" style="color:var(--wave)"></span>入射波</label>
+        <label class="opt"><input type="checkbox" id="m3_cRefl" checked><span class="sw dash" style="color:var(--secondary)"></span>反射波</label>
+        <label class="opt"><input type="checkbox" id="m3_cSum" checked><span class="sw" style="background:var(--ink)"></span>合成波（定常波）</label>
+      </div>
+
+      <div class="btns">
+        <button class="b" id="m3_bOnePeriod" style="justify-content:center">⏭ 1周期後を見る</button>
+        <div class="btnrow">
+          <button class="b primary" id="m3_bPlay">⏸ 一時停止</button>
+          <button class="b" id="m3_bReset">↺ リセット</button>
+        </div>
+      </div>
+    </div>
+  </div>
+   </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const WORLD_W = 10;
+  const PAD = 10;
+  const DISPLAY_Y_MAX = 2.0;
+
+  const state = {
+    mode: 1,
+    t: 0,
+    playing: true,
+    autoRelaunchAt: null,
+
+    m1_shape: "mountain",   // "mountain" | "ku" | "continuous"
+    m1_A: 0.5, m1_w: 1.0, m1_v: 2.0, m1_invertR: false,
+    m1c_A: 0.5, m1c_lambda: 2.5, m1c_f: 0.8,
+
+    m2_source: "pulse",
+    m2_end: "fixed",
+    m2p_A: 0.5, m2p_w: 1.0, m2p_v: 2.0,
+    m2c_A: 0.5, m2c_lambda: 2.5, m2c_f: 0.8,
+    showInc: true, showRefl: true, showSum: true,
+
+    m3_end: "fixed",
+    m3_A: 0.5, m3_lambda: 2.5, m3_f: 0.8,
+    m3_showInc: true, m3_showRefl: true, m3_showSum: true,
+
+    tapX: null,
+    periodAnimating: false,
+    periodAnimUntil: null,
+  };
+
+  const M1_X_L = 1.0, M1_X_R = 9.0;
+  const M2_X0 = 1.0;
+
+  // ---- canvas ----
+  const cvW = document.getElementById("cvW");
+  const ctxW = cvW.getContext("2d");
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+  let dimW;
+
+  function sizeCanvas(cv, ctx) {
+    const cssW = cv.clientWidth, cssH = cv.clientHeight;
+    cv.width = Math.max(1, Math.round(cssW * dpr));
+    cv.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w: cssW, h: cssH };
+  }
+  function layout() {
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    dimW = sizeCanvas(cvW, ctxW);
+  }
+
+  // ---- pulse & wave functions ----
+  // 山型: smooth raised-cosine bump. く形: sharp angular tent (straight edges
+  // meeting at a point, like the corner in the character く).
+  function mountainPulse(u, A, w) {
+    if (Math.abs(u) > w) return 0;
+    return A * 0.5 * (1 + Math.cos(Math.PI * u / w));
+  }
+  function kuPulse(u, A, w) {
+    if (Math.abs(u) > w) return 0;
+    return A * (1 - Math.abs(u) / w);
+  }
+  function pulseShape(u, A, w) { return mountainPulse(u, A, w); }
+  function shapeFn() { return state.m1_shape === "ku" ? kuPulse : mountainPulse; }
+
+  function m1_yL(x, t) {
+    if (state.m1_shape === "continuous") return m1c_yL(x, t);
+    return shapeFn()(x - (M1_X_L + state.m1_v * t), state.m1_A, state.m1_w);
+  }
+  function m1_yR(x, t) {
+    if (state.m1_shape === "continuous") return m1c_yR(x, t);
+    const sign = state.m1_invertR ? -1 : 1;
+    return sign * shapeFn()(x - (M1_X_R - state.m1_v * t), state.m1_A, state.m1_w);
+  }
+  // Two continuous sources, one at each edge, both starting at t=0 — the
+  // wavefronts sweep inward and interfere where they overlap, same causal
+  // windowing idea as the reflection modes.
+  function m1c_yL(x, t) {
+    const v = state.m1c_f * state.m1c_lambda;
+    if (t < x / v) return 0;
+    return state.m1c_A * Math.sin(contW(state.m1c_f) * t - contK(state.m1c_lambda) * x);
+  }
+  function m1c_yR(x, t) {
+    const sign = state.m1_invertR ? -1 : 1;
+    const v = state.m1c_f * state.m1c_lambda;
+    const dist = WORLD_W - x;
+    if (t < dist / v) return 0;
+    return sign * state.m1c_A * Math.sin(contW(state.m1c_f) * t - contK(state.m1c_lambda) * dist);
+  }
+
+  function m2p_yInc(x, t) { return pulseShape(x - (M2_X0 + state.m2p_v * t), state.m2p_A, state.m2p_w); }
+  function m2p_yRefl(x, t) {
+    const sign = state.m2_end === "fixed" ? -1 : 1;
+    return sign * pulseShape((2 * WORLD_W - x) - (M2_X0 + state.m2p_v * t), state.m2p_A, state.m2p_w);
+  }
+
+  // Continuous wave, shared by "reflection" (causal, wavefront sweeps in from
+  // the edge and the pattern builds up as it goes) and "standing wave" (not
+  // causal — already filling the whole domain from t=0) modes.
+  function contK(lambda) { return 2 * Math.PI / lambda; }
+  function contW(f) { return 2 * Math.PI * f; }
+  // sin(w*t - k*distance) rather than sin(k*distance - w*t): both describe a
+  // wave travelling away from its source at the same speed, but this form
+  // rises into a crest first as the wavefront arrives (its time-derivative
+  // at the wavefront is positive), matching how a hand actually starts a
+  // wave by flicking the string upward first, instead of leading with a dip.
+  function contIncident(A, lambda, f, x, t, causal) {
+    if (causal) {
+      const v = f * lambda;
+      if (t < x / v) return 0;   // wavefront (from the left edge) hasn't reached x yet
+    }
+    return A * Math.sin(contW(f) * t - contK(lambda) * x);
+  }
+  function contReflected(A, lambda, f, end, x, t, causal) {
+    const sign = end === "fixed" ? -1 : 1;
+    if (causal) {
+      const v = f * lambda;
+      const tArrive = (2 * WORLD_W - x) / v;   // time for the wall-bounced front to reach x
+      if (t < tArrive) return 0;
+    }
+    return sign * A * Math.sin(contW(f) * t - contK(lambda) * (2 * WORLD_W - x));
+  }
+  function contEnvelope(A, lambda, end, x) {
+    const xi = WORLD_W - x;
+    if (end === "fixed") return 2 * A * Math.abs(Math.sin(contK(lambda) * xi));
+    return 2 * A * Math.abs(Math.cos(contK(lambda) * xi));
+  }
+
+  function m2c_yInc(x, t) { return contIncident(state.m2c_A, state.m2c_lambda, state.m2c_f, x, t, true); }
+  function m2c_yRefl(x, t) { return contReflected(state.m2c_A, state.m2c_lambda, state.m2c_f, state.m2_end, x, t, true); }
+
+  function m3_yInc(x, t) { return contIncident(state.m3_A, state.m3_lambda, state.m3_f, x, t, false); }
+  function m3_yRefl(x, t) { return contReflected(state.m3_A, state.m3_lambda, state.m3_f, state.m3_end, x, t, false); }
+  function m3_envelope(x) { return contEnvelope(state.m3_A, state.m3_lambda, state.m3_end, x); }
+
+  // ---- drawing helpers ----
+  function bg(ctx, w, h) { ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); }
+  function frame(ctx, w, h) { ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, w - 1, h - 1); }
+  function axis(ctx, w, h, ticks) {
+    const midY = h / 2, ampPx = h / 2 - 14, innerW = w - 2 * PAD;
+    ctx.strokeStyle = "#eef2f6"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= ticks; i++) { const x = PAD + (innerW * i) / ticks; ctx.moveTo(x, 0); ctx.lineTo(x, h); }
+    ctx.stroke();
+    ctx.strokeStyle = "#e2e8f0"; ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, midY - ampPx); ctx.lineTo(w, midY - ampPx);
+    ctx.moveTo(0, midY + ampPx); ctx.lineTo(w, midY + ampPx);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
+  }
+  function numLabel(ctx, text, x, y, align, color) {
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width, padX = 3;
+    let bx = x - padX;
+    if (align === "center") bx = x - tw / 2 - padX;
+    else if (align === "right") bx = x - tw - padX;
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillRect(bx, y - 8, tw + padX * 2, 16);
+    ctx.fillStyle = color || "#64748b";
+    ctx.textAlign = align === "center" ? "center" : (align === "right" ? "right" : "left");
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function timeChip(ctx, w, text) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const tw = ctx.measureText(text).width, bw = tw + 22, bh = 28, bx = w - PAD - bw, by = 7;
+    roundRectPath(ctx, bx, by, bw, bh, 9);
+    ctx.fillStyle = "rgba(15,23,42,0.88)"; ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, bx + bw / 2, by + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+  }
+  function drawCurve(ctx, w, h, fn, color, width, dashed) {
+    const midY = h / 2, ampPx = h / 2 - 14;
+    ctx.beginPath();
+    for (let px = PAD; px <= w - PAD; px++) {
+      const xw = ((px - PAD) / (w - 2 * PAD)) * WORLD_W;
+      const y = midY - (fn(xw, state.t) / DISPLAY_Y_MAX) * ampPx;
+      if (px === PAD) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = "round";
+    if (dashed) ctx.setLineDash([7, 5]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawWall(ctx, w, h, sumFn, end) {
+    const midY = h / 2, ampPx = h / 2 - 14, x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+    const wx = x2px(WORLD_W);
+    if (end === "fixed") {
+      const bw = 7;
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(wx, 0, bw, h);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let y = -bw; y < h + bw; y += 9) { ctx.moveTo(wx, y + bw); ctx.lineTo(wx + bw, y); }
+      ctx.stroke();
+      numLabel(ctx, "固定端", wx - 4, 16, "right", "#475569");
+    } else {
+      ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(wx + 3, 6); ctx.lineTo(wx + 3, h - 6); ctx.stroke();
+      const y = midY - (sumFn(WORLD_W, state.t) / DISPLAY_Y_MAX) * ampPx;
+      ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(wx + 3, y, 6.5, 0, 7); ctx.stroke();
+      numLabel(ctx, "自由端", wx - 4, 16, "right", "#94a3b8");
+    }
+  }
+
+  function drawMode1() {
+    const { w, h } = dimW;
+    bg(ctxW, w, h);
+    axis(ctxW, w, h, WORLD_W);
+    drawCurve(ctxW, w, h, m1_yL, "#4f46e5", 2, true);
+    drawCurve(ctxW, w, h, m1_yR, "#f59e0b", 2, true);
+    drawCurve(ctxW, w, h, (x, t) => m1_yL(x, t) + m1_yR(x, t), "#0f172a", 3.2, false);
+
+    const midY = h / 2, ampPx = h / 2 - 14;
+    numLabel(ctxW, "+" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxW, "0", PAD + 2, midY, "left");
+    numLabel(ctxW, "−" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY + ampPx, "left");
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+    for (let xw = 2; xw <= WORLD_W; xw += 2) numLabel(ctxW, String(xw), x2px(xw), midY + 11, "center");
+    numLabel(ctxW, "x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+    timeChip(ctxW, w, "t = " + state.t.toFixed(2) + " s");
+    frame(ctxW, w, h);
+  }
+
+  function drawMode2() {
+    const { w, h } = dimW;
+    bg(ctxW, w, h);
+    axis(ctxW, w, h, WORLD_W);
+
+    const isCont = state.m2_source === "continuous";
+    const yInc = isCont ? m2c_yInc : m2p_yInc;
+    const yRefl = isCont ? m2c_yRefl : m2p_yRefl;
+    const ySum = (x, t) => yInc(x, t) + yRefl(x, t);
+
+    if (state.showInc) drawCurve(ctxW, w, h, yInc, "#4f46e5", 2, true);
+    if (state.showRefl) drawCurve(ctxW, w, h, yRefl, "#f59e0b", 2, true);
+    if (state.showSum) drawCurve(ctxW, w, h, ySum, "#0f172a", 3.2, false);
+
+    drawWall(ctxW, w, h, ySum, state.m2_end);
+
+    const midY = h / 2, ampPx = h / 2 - 14;
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+
+    numLabel(ctxW, "+" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxW, "0", PAD + 2, midY, "left");
+    numLabel(ctxW, "−" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY + ampPx, "left");
+    for (let xw = 2; xw <= WORLD_W; xw += 2) numLabel(ctxW, String(xw), x2px(xw), midY + 11, "center");
+    numLabel(ctxW, "x [m]", PAD + 2, h - 11, "left", "#94a3b8");
+    timeChip(ctxW, w, "t = " + state.t.toFixed(2) + " s");
+    frame(ctxW, w, h);
+  }
+
+  function drawMode3() {
+    const { w, h } = dimW;
+    bg(ctxW, w, h);
+    axis(ctxW, w, h, WORLD_W);
+
+    const ySum = (x, t) => m3_yInc(x, t) + m3_yRefl(x, t);
+
+    if (state.m3_showInc) drawCurve(ctxW, w, h, m3_yInc, "#4f46e5", 2, true);
+    if (state.m3_showRefl) drawCurve(ctxW, w, h, m3_yRefl, "#f59e0b", 2, true);
+    if (state.m3_showSum) drawCurve(ctxW, w, h, ySum, "#0f172a", 3.2, false);
+
+    drawWall(ctxW, w, h, ySum, state.m3_end);
+
+    const midY = h / 2, ampPx = h / 2 - 14;
+    const x2px = (xw) => PAD + (xw / WORLD_W) * (w - 2 * PAD);
+
+    if (state.tapX != null) {
+      const env = m3_envelope(state.tapX);
+      const px = x2px(state.tapX);
+      const py = midY - (env / DISPLAY_Y_MAX) * ampPx;
+      const pyN = midY + (env / DISPLAY_Y_MAX) * ampPx;
+      ctxW.strokeStyle = "rgba(244,63,94,.4)"; ctxW.lineWidth = 1.5; ctxW.setLineDash([4, 4]);
+      ctxW.beginPath(); ctxW.moveTo(px, py); ctxW.lineTo(px, pyN); ctxW.stroke();
+      ctxW.setLineDash([]);
+      ctxW.fillStyle = "#f43f5e";
+      ctxW.beginPath(); ctxW.arc(px, py, 5, 0, 7); ctxW.fill();
+      ctxW.beginPath(); ctxW.arc(px, pyN, 5, 0, 7); ctxW.fill();
+
+      const ratio = env / (2 * state.m3_A);
+      let label;
+      if (ratio < 0.15) label = "節（振幅 0 m）";
+      else if (ratio > 0.85) label = "腹（振幅最大 " + env.toFixed(2) + " m）";
+      else label = "節でも腹でもない（振幅 " + env.toFixed(2) + " m）";
+      numLabel(ctxW, label, px, Math.max(24, py - 16), "center", "#0f172a");
+    }
+
+    numLabel(ctxW, "+" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY - ampPx, "left");
+    numLabel(ctxW, "0", PAD + 2, midY, "left");
+    numLabel(ctxW, "−" + DISPLAY_Y_MAX.toFixed(1) + " m", PAD + 2, midY + ampPx, "left");
+    for (let xw = 2; xw <= WORLD_W; xw += 2) numLabel(ctxW, String(xw), x2px(xw), midY + 11, "center");
+    numLabel(ctxW, "x [m]", PAD + 2, h - 11, "left", "#94a3b8");
+    timeChip(ctxW, w, "t = " + state.t.toFixed(2) + " s");
+    frame(ctxW, w, h);
+  }
+
+  function draw() {
+    if (state.mode === 1) drawMode1();
+    else if (state.mode === 2) drawMode2();
+    else drawMode3();
+  }
+
+  // Once a pulse has fully left the visible domain, wait 1 simulated second
+  // then relaunch it automatically (only meaningful for modes with a
+  // single travelling pulse; mode 1's two pulses and mode 2's pulse source).
+  function checkAutoRelaunch() {
+    let exited;
+    if (state.mode === 1 && state.m1_shape === "continuous") {
+      state.autoRelaunchAt = null;   // continuous sources just keep going, nothing to relaunch
+      return;
+    }
+    if (state.mode === 1) {
+      const peakL = M1_X_L + state.m1_v * state.t;
+      const peakR = M1_X_R - state.m1_v * state.t;
+      exited = (peakL - state.m1_w > WORLD_W) && (peakR + state.m1_w < 0);
+    } else if (state.mode === 2 && state.m2_source === "pulse") {
+      const reflPeak = 2 * WORLD_W - M2_X0 - state.m2p_v * state.t;
+      exited = reflPeak + state.m2p_w < 0;
+    } else {
+      state.autoRelaunchAt = null;
+      return;
+    }
+    if (exited) {
+      if (state.autoRelaunchAt == null) state.autoRelaunchAt = state.t + 1.0;
+      else if (state.t >= state.autoRelaunchAt) { state.t = 0; state.autoRelaunchAt = null; }
+    } else {
+      state.autoRelaunchAt = null;
+    }
+  }
+
+  let last = null;
+  function loop(ts) {
+    if (last == null) last = ts;
+    const dt = Math.min(0.05, (ts - last) / 1000);
+    last = ts;
+    if (state.periodAnimating) {
+      state.t += dt;
+      if (state.t >= state.periodAnimUntil) {
+        state.t = state.periodAnimUntil;
+        state.periodAnimating = false;
+        syncPlayBtns();
+      }
+    } else if (state.playing) {
+      state.t += dt;
+      checkAutoRelaunch();
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- UI wiring ----
+  function bindSlider(rangeId, valId, stateKey, fmt) {
+    const r = document.getElementById(rangeId), v = document.getElementById(valId);
+    r.addEventListener("input", () => { state[stateKey] = +r.value; v.textContent = fmt(+r.value); refreshFormulas(); });
+  }
+  const fmt2 = (x) => x.toFixed(2);
+  const fmt1 = (x) => x.toFixed(1);
+
+  bindSlider("m1_rA", "m1_vA", "m1_A", fmt2);
+  bindSlider("m1_rW", "m1_vW", "m1_w", fmt1);
+  bindSlider("m1_rV", "m1_vV", "m1_v", fmt1);
+  bindSlider("m1c_rA", "m1c_vA", "m1c_A", fmt2);
+  bindSlider("m1c_rL", "m1c_vL", "m1c_lambda", fmt1);
+  bindSlider("m1c_rF", "m1c_vF", "m1c_f", fmt2);
+  document.getElementById("m1_cInvert").addEventListener("change", (e) => { state.m1_invertR = e.target.checked; });
+
+  bindSlider("m2p_rA", "m2p_vA", "m2p_A", fmt2);
+  bindSlider("m2p_rW", "m2p_vW", "m2p_w", fmt1);
+  bindSlider("m2p_rV", "m2p_vV", "m2p_v", fmt1);
+
+  bindSlider("m2c_rA", "m2c_vA", "m2c_A", fmt2);
+  bindSlider("m2c_rL", "m2c_vL", "m2c_lambda", fmt1);
+  bindSlider("m2c_rF", "m2c_vF", "m2c_f", fmt2);
+
+  bindSlider("m3_rA", "m3_vA", "m3_A", fmt2);
+  bindSlider("m3_rL", "m3_vL", "m3_lambda", fmt1);
+  bindSlider("m3_rF", "m3_vF", "m3_f", fmt2);
+
+  const m1c_vNums = document.getElementById("m1c_vNums");
+  const m2c_vNums = document.getElementById("m2c_vNums");
+  const m3_vNums = document.getElementById("m3_vNums");
+  const m3_tNums = document.getElementById("m3_tNums");
+  function refreshFormulas() {
+    const v1 = state.m1c_f * state.m1c_lambda;
+    m1c_vNums.innerHTML =
+      '= <span style="color:var(--accent)">' + state.m1c_f.toFixed(2) + ' Hz</span> × ' +
+      '<span style="color:var(--wave)">' + state.m1c_lambda.toFixed(1) + ' m</span> = ' +
+      '<b>' + v1.toFixed(2) + ' m/s</b>';
+    const v2 = state.m2c_f * state.m2c_lambda;
+    m2c_vNums.innerHTML =
+      '= <span style="color:var(--accent)">' + state.m2c_f.toFixed(2) + ' Hz</span> × ' +
+      '<span style="color:var(--wave)">' + state.m2c_lambda.toFixed(1) + ' m</span> = ' +
+      '<b>' + v2.toFixed(2) + ' m/s</b>';
+    const v3 = state.m3_f * state.m3_lambda;
+    m3_vNums.innerHTML =
+      '= <span style="color:var(--accent)">' + state.m3_f.toFixed(2) + ' Hz</span> × ' +
+      '<span style="color:var(--wave)">' + state.m3_lambda.toFixed(1) + ' m</span> = ' +
+      '<b>' + v3.toFixed(2) + ' m/s</b>';
+    const T3 = 1 / state.m3_f;
+    m3_tNums.innerHTML =
+      '= 1 / <span style="color:var(--accent)">' + state.m3_f.toFixed(2) + ' Hz</span> = ' +
+      '<b>' + T3.toFixed(2) + ' s</b>';
+  }
+
+  document.getElementById("m2_cInc").addEventListener("change", (e) => { state.showInc = e.target.checked; });
+  document.getElementById("m2_cRefl").addEventListener("change", (e) => { state.showRefl = e.target.checked; });
+  document.getElementById("m2_cSum").addEventListener("change", (e) => { state.showSum = e.target.checked; });
+
+  document.getElementById("m3_cInc").addEventListener("change", (e) => { state.m3_showInc = e.target.checked; });
+  document.getElementById("m3_cRefl").addEventListener("change", (e) => { state.m3_showRefl = e.target.checked; });
+  document.getElementById("m3_cSum").addEventListener("change", (e) => { state.m3_showSum = e.target.checked; });
+
+  function syncPlayBtns() {
+    const txt = (state.playing || state.periodAnimating) ? "⏸ 一時停止" : "▶ 再生";
+    document.getElementById("m1_bPlay").textContent = txt;
+    document.getElementById("m2_bPlay").textContent = txt;
+    document.getElementById("m3_bPlay").textContent = txt;
+  }
+  function togglePlay() {
+    if (state.periodAnimating) { state.periodAnimating = false; state.playing = false; }
+    else { state.playing = !state.playing; }
+    syncPlayBtns();
+  }
+  document.getElementById("m1_bPlay").addEventListener("click", togglePlay);
+  document.getElementById("m2_bPlay").addEventListener("click", togglePlay);
+  document.getElementById("m3_bPlay").addEventListener("click", togglePlay);
+
+  function resetTime() {
+    state.t = 0; state.playing = true; state.tapX = null; state.autoRelaunchAt = null;
+    state.periodAnimating = false; state.periodAnimUntil = null;
+    syncPlayBtns();
+  }
+  document.getElementById("m1_bReset").addEventListener("click", resetTime);
+  document.getElementById("m2_bReset").addEventListener("click", resetTime);
+  document.getElementById("m3_bReset").addEventListener("click", resetTime);
+
+  // Pause, then step forward by exactly one period T = 1/f (animated, not an
+  // instant jump) so the whole standing wave's motion during that period is
+  // visible, ending with the curve back in the same shape it started in —
+  // the direct demonstration that a standing wave's period equals the
+  // period of the waves that make it up.
+  document.getElementById("m3_bOnePeriod").addEventListener("click", () => {
+    state.playing = false;
+    const T = 1 / state.m3_f;
+    state.periodAnimUntil = state.t + T;
+    state.periodAnimating = true;
+    syncPlayBtns();
+  });
+
+  const graphName = document.getElementById("graphName");
+  const graphDesc = document.getElementById("graphDesc");
+  const headerSub = document.getElementById("headerSub");
+  function updateGraphHead() {
+    if (state.mode === 1) {
+      const shapeTxt = state.m1_shape === "mountain" ? "山型パルス" : state.m1_shape === "ku" ? "く形パルス" : "連続波";
+      graphName.textContent = "① 重ね合わせ（" + shapeTxt + "）";
+      graphDesc.textContent = state.m1_shape === "continuous"
+        ? "　横軸 = 位置 x（点線＝個々の波、実線＝合成波。波の先端が画面外から届く）"
+        : "　横軸 = 位置 x（点線＝個々のパルス、実線＝合成波）";
+      headerSub.textContent = "2つの波が出会うとどうなるかを見てみよう";
+    } else if (state.mode === 2) {
+      const endTxt = state.m2_end === "fixed" ? "固定端" : "自由端";
+      const srcTxt = state.m2_source === "continuous" ? "連続波" : "パルス";
+      graphName.textContent = "② 反射（" + endTxt + "・" + srcTxt + "）";
+      graphDesc.textContent = state.m2_source === "continuous" ? "　波の先端が画面外から届き、反射と重なっていく" : "　横軸 = 位置 x";
+      headerSub.textContent = "波が壁で反射するとどうなるかを見てみよう";
+    } else {
+      const endTxt = state.m3_end === "fixed" ? "固定端" : "自由端";
+      graphName.textContent = "③ 定常波（" + endTxt + "）";
+      graphDesc.textContent = "　グラフをタップ → 節・腹を確認";
+      headerSub.textContent = "最初から定常波ができている状態を観察しよう";
+    }
+  }
+
+  const segMode = document.getElementById("segMode");
+  function setMode(m) {
+    state.mode = m; state.t = 0; state.playing = true; state.tapX = null; state.autoRelaunchAt = null;
+    state.periodAnimating = false; state.periodAnimUntil = null;
+    [...segMode.children].forEach(b => b.classList.toggle("on", +b.dataset.mode === m));
+    document.getElementById("mode1Ctls").style.display = m === 1 ? "" : "none";
+    document.getElementById("mode2Ctls").style.display = m === 2 ? "" : "none";
+    document.getElementById("mode3Ctls").style.display = m === 3 ? "" : "none";
+    updateGraphHead(); syncPlayBtns();
+  }
+  segMode.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setMode(+b.dataset.mode); });
+
+  const segShape1 = document.getElementById("segShape1");
+  function setShape1(shape) {
+    state.m1_shape = shape; state.t = 0; state.playing = true; state.autoRelaunchAt = null;
+    [...segShape1.children].forEach(b => b.classList.toggle("on", b.dataset.shape === shape));
+    document.getElementById("m1ContCtls").style.display = shape === "continuous" ? "" : "none";
+    document.getElementById("m1PulseCtls").style.display = shape === "continuous" ? "none" : "";
+    updateGraphHead(); syncPlayBtns();
+  }
+  segShape1.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setShape1(b.dataset.shape); });
+
+  const segSrc = document.getElementById("segSrc");
+  function setSrc(s) {
+    state.m2_source = s; state.t = 0; state.playing = true; state.tapX = null; state.autoRelaunchAt = null;
+    [...segSrc.children].forEach(b => b.classList.toggle("on", b.dataset.src === s));
+    document.querySelector("#m2ContCtls").style.display = s === "continuous" ? "" : "none";
+    document.querySelector("#m2PulseCtls").style.display = s === "pulse" ? "" : "none";
+    updateGraphHead(); syncPlayBtns();
+  }
+  segSrc.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setSrc(b.dataset.src); });
+
+  const segEnd = document.getElementById("segEnd");
+  function setEnd(v) {
+    state.m2_end = v; state.tapX = null; state.autoRelaunchAt = null;
+    [...segEnd.children].forEach(b => b.classList.toggle("on", b.dataset.end === v));
+    updateGraphHead();
+  }
+  segEnd.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setEnd(b.dataset.end); });
+
+  const segEnd3 = document.getElementById("segEnd3");
+  function setEnd3(v) {
+    state.m3_end = v; state.tapX = null;
+    [...segEnd3.children].forEach(b => b.classList.toggle("on", b.dataset.end === v));
+    updateGraphHead();
+  }
+  segEnd3.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setEnd3(b.dataset.end); });
+
+  function pickX(e) {
+    if (state.mode !== 3) return;
+    const rect = cvW.getBoundingClientRect();
+    const clientX = (e.touches ? e.touches[0].clientX : e.clientX);
+    const px = clientX - rect.left;
+    const inner = rect.width - 2 * PAD;
+    let xw = ((px - PAD) / inner) * WORLD_W;
+    xw = Math.max(0, Math.min(WORLD_W, xw));
+    state.tapX = xw;
+  }
+  cvW.addEventListener("pointerdown", pickX);
+  cvW.addEventListener("pointermove", (e) => { if (e.pressure > 0 || e.buttons) pickX(e); });
+
+  window.addEventListener("resize", () => { layout(); draw(); });
+  window.addEventListener("load", () => { layout(); draw(); });
+  window.addEventListener("orientationchange", () => { layout(); draw(); });
+  const ro = new ResizeObserver(() => { layout(); draw(); });
+  ro.observe(cvW);
+
+  // ---- init ----
+  layout();
+  updateGraphHead();
+  syncPlayBtns();
+  refreshFormulas();
+  requestAnimationFrame(loop);
+})();
+</script>
