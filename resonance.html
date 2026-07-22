@@ -1,0 +1,1010 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>弦の振動・気柱の共鳴</title>
+<style>
+  :root {
+    --bg-1: #eef2ff;
+    --bg-2: #f8fafc;
+    --card: #ffffff;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --ink-faint: #94a3b8;
+    --line: #e2e8f0;
+    --wave: #4f46e5;
+    --particle: #f43f5e;
+    --accent: #0ea5e9;
+    --secondary: #f59e0b;
+    --good: #16a34a;
+    --shadow: 0 10px 30px -12px rgba(15, 23, 42, .25);
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
+                 "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right))
+             max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  }
+
+  .main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr minmax(280px, 340px);
+    gap: 14px;
+  }
+  .left { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  .graph-card { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-bottom: 0; padding-bottom: 12px; }
+  .graph-card canvas { flex: 1 1 auto; min-height: 0; height: auto; }
+  .right { min-height: 0; }
+  .right .card { height: 100%; margin-bottom: 0; overflow: auto; }
+
+  header.top { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+
+  @media (max-width: 767px) {
+    body { overflow: auto; }
+    .app { height: auto; min-height: 100dvh; }
+    .main { grid-template-columns: 1fr; }
+    .graph-card { min-height: 260px; }
+    .right .card { height: auto; }
+  }
+  header.top h1 { font-size: 20px; font-weight: 700; letter-spacing: .02em; margin: 0; }
+  header.top .sub { font-size: 13px; color: var(--ink-soft); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 14px 16px 8px;
+    margin-bottom: 14px;
+  }
+
+  .graph-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 4px; }
+  .graph-head .name { font-size: 14px; font-weight: 700; }
+  .graph-head .desc { font-size: 12px; color: var(--ink-faint); }
+
+  canvas { width: 100%; display: block; border-radius: 10px; touch-action: none; }
+
+  .modeSeg { margin-bottom: 8px; }
+  .seg { display: flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .seg button { flex: 1; border: none; background: #fff; padding: 9px 8px; font-size: 12.5px; font-weight: 600; min-height: 42px; cursor: pointer; color: var(--ink-soft); }
+  .seg button.on { background: var(--wave); color: #fff; }
+
+  .controls .row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 6px 16px;
+  }
+  .ctl { padding: 0 2px; }
+  .ctl .label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+  .ctl .label .k { font-size: 13px; font-weight: 700; }
+  .ctl .label .k small { font-weight: 500; color: var(--ink-faint); margin-left: 4px; }
+  .ctl .label .v { font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 700; color: var(--wave); }
+  .ctl .label .v .u { font-size: 11px; font-weight: 600; color: var(--ink-faint); margin-left: 2px; }
+
+  .sechead { margin: 3px 0 4px; padding-top: 4px; border-top: 1px solid var(--line); font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+  .sechead:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 30px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px;
+    border-radius: 50%; background: #fff; border: 2px solid var(--wave);
+    box-shadow: 0 3px 8px -1px rgba(79, 70, 229, .45); cursor: pointer;
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 999px; background: var(--line); }
+  input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border: 2px solid var(--wave); background: #fff; border-radius: 50%; }
+
+  .readout {
+    margin-top: 5px; padding: 8px 10px; border-radius: 12px;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff);
+    border: 1px solid #dbeafe; display: flex; flex-direction: column; gap: 4px;
+    font-size: 12.5px; color: var(--ink-soft);
+  }
+  .readout b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .readout .hi { color: var(--wave); }
+
+  .statGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 4px; }
+  .statTile {
+    padding: 8px 8px 7px; border-radius: 12px; text-align: center;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff); border: 1px solid #dbeafe;
+  }
+  .statTile .stLabel { font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+  .statTile .stValue { font-size: 22px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.25; }
+  .statTile .stValue .u { font-size: 12px; font-weight: 700; color: var(--ink-faint); margin-left: 2px; }
+  .statTile.accent { background: linear-gradient(135deg, #e0e7ff, #eef2ff); border-color: #c7d2fe; }
+  .statTile.accent .stValue { color: var(--wave); }
+  .statTile.accent2 { background: linear-gradient(135deg, #fef3c7, #fffbeb); border-color: #fde68a; }
+  .statTile.accent2 .stValue { color: #b45309; }
+
+  .meterRow { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .meterLabel { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  .meterTrack { flex: 1; height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .meterFill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #c7d2fe, var(--wave)); width: 0%; transition: width .08s linear; }
+  .meterPct { font-size: 12px; font-weight: 700; color: var(--ink); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .opts { margin-top: 2px; display: flex; flex-direction: column; gap: 2px; }
+  .opt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; min-height: 20px; }
+
+  .btns { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  button.b {
+    appearance: none; border: 1px solid var(--line); background: #fff; color: var(--ink);
+    font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 11px; cursor: pointer;
+    min-height: 42px; display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+    transition: transform .05s ease, background .15s ease, border-color .15s ease;
+  }
+  button.b:active { transform: scale(.96); }
+  button.b.primary { background: var(--wave); border-color: var(--wave); color: #fff; box-shadow: 0 6px 16px -6px rgba(79, 70, 229, .6); }
+  button.b.sound { width: 100%; }
+  button.b.sound.on { background: var(--good); border-color: var(--good); color: #fff; }
+  .right .btns { flex-direction: column; align-items: stretch; }
+  .btnrow { display: flex; gap: 6px; }
+  .btnrow #bPlay2 { flex: 2; }
+  .btnrow #bReset2 { flex: 1; }
+
+  .hint { margin-top: 6px; font-size: 11px; color: var(--ink-faint); }
+
+  .btnwrap { display: flex; flex-wrap: wrap; gap: 6px; }
+  .btnwrap button.b { flex: 0 0 auto; padding: 8px 12px; min-height: 38px; font-size: 12.5px; }
+  .btnwrap button.b.on { background: var(--wave); border-color: var(--wave); color: #fff; }
+
+  .harmonicNav { display: flex; gap: 8px; }
+  .harmonicNav button.b {
+    flex: 1; min-height: 52px; font-size: 16px; font-weight: 800;
+    background: linear-gradient(135deg, #eef2ff, #ecfeff); border: 2px solid #c7d2fe; color: var(--wave);
+    box-shadow: 0 3px 10px -4px rgba(79, 70, 229, .35);
+  }
+  .harmonicNav button.b:active { background: var(--wave); border-color: var(--wave); color: #fff; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>弦の振動・気柱の共鳴</h1>
+    <span class="sub" id="headerSub">振動数や長さを変えて、定常波ができる条件を探そう</span>
+  </header>
+
+  <div class="main">
+   <div class="left">
+    <div class="card graph-card">
+      <div class="graph-head">
+        <div>
+          <span class="name" id="graphName">① 弦の振動</span>
+          <span class="desc" id="graphDesc">　両端固定の弦</span>
+        </div>
+      </div>
+      <canvas id="cvR"></canvas>
+    </div>
+   </div>
+
+   <aside class="right">
+  <div class="card controls">
+    <div class="seg modeSeg" id="segMode">
+      <button data-mode="string" class="on">① 弦の振動</button>
+      <button data-mode="air">② 気柱の共鳴</button>
+    </div>
+
+    <div id="stringCtls">
+      <div class="ctl" style="margin-bottom:10px">
+        <div class="label"><span class="k">弦の長さ <small>L</small></span></div>
+        <div class="seg" id="segLen">
+          <button data-l="3">3 m</button>
+          <button data-l="2" class="on">2 m</button>
+          <button data-l="1">1 m</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="ctl">
+          <div class="label"><span class="k">波長 <small>λ</small></span><span class="v"><span id="s_vLambda">1.60</span><span class="u">m</span></span></div>
+          <input type="range" id="s_rU" min="0.5" max="16" step="0.01" value="2.5">
+          <div class="harmonicNav" style="margin-top:8px">
+            <button class="b" id="s_bPrevN">◀ 前の共鳴</button>
+            <button class="b" id="s_bNextN">次の共鳴 ▶</button>
+          </div>
+          <div class="hint">高い倍振動（8倍・16倍など）は波長の間隔が非常に狭くなるため、スライダーは倍振動の番号に合わせて等間隔になるよう調整しています。</div>
+        </div>
+      </div>
+
+      <div class="statGrid">
+        <div class="statTile accent">
+          <div class="stLabel">弦の長さ L</div>
+          <div class="stValue"><span id="s_stL">2</span><span class="u">m</span></div>
+        </div>
+        <div class="statTile accent2">
+          <div class="stLabel">波長 λ</div>
+          <div class="stValue"><span id="s_stLambda">1.60</span><span class="u">m</span></div>
+        </div>
+        <div class="statTile">
+          <div class="stLabel">振動数 f = v / λ</div>
+          <div class="stValue"><span id="s_stF">—</span><span class="u">Hz</span></div>
+        </div>
+        <div class="statTile">
+          <div class="stLabel">音速 v（固定）</div>
+          <div class="stValue">150<span class="u">m/s</span></div>
+        </div>
+      </div>
+      <div class="meterRow">
+        <span class="meterLabel">共鳴度</span>
+        <div class="meterTrack"><div class="meterFill" id="s_meterFill"></div></div>
+        <span class="meterPct" id="s_meterPct">0%</span>
+      </div>
+      <div class="readout" id="s_statusBox">共鳴していません</div>
+
+      <div class="sechead">音</div>
+      <div class="btns">
+        <button class="b sound" id="s_bSound">🔈 弦の音を鳴らす</button>
+      </div>
+
+      <div class="btns">
+        <div class="btnrow">
+          <button class="b primary" id="bPlay">⏸ 一時停止</button>
+          <button class="b" id="s_bReset">↺ リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="airCtls" style="display:none">
+      <div class="seg" id="segEndAir">
+        <button data-end="closed" class="on">閉管</button>
+        <button data-end="open">開管</button>
+      </div>
+
+      <div class="ctl" style="margin-bottom:10px">
+        <div class="label"><span class="k">管の長さ <small>L</small></span></div>
+        <div class="seg" id="segLenAir">
+          <button data-l="1">1 m</button>
+          <button data-l="3" class="on">3 m</button>
+          <button data-l="5">5 m</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="ctl">
+          <div class="label"><span class="k">振動数 <small>f</small></span><span class="v"><span id="a_vF">450</span><span class="u">Hz</span></span></div>
+          <input type="range" id="a_rF" min="10" max="2000" step="5" value="450">
+          <div class="harmonicNav" style="margin-top:8px">
+            <button class="b" id="a_bPrevN">◀ 前の共鳴</button>
+            <button class="b" id="a_bNextN">次の共鳴 ▶</button>
+          </div>
+          <div class="hint">共鳴に近づけて離すと自動でぴったり合わせます（閉管は奇数倍のみ）。</div>
+        </div>
+      </div>
+
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="a_particleMode"> 媒質の動き（縦波）で表示</label>
+      </div>
+
+      <div class="statGrid">
+        <div class="statTile accent">
+          <div class="stLabel">管の長さ L</div>
+          <div class="stValue"><span id="a_stL">3</span><span class="u">m</span></div>
+        </div>
+        <div class="statTile accent2">
+          <div class="stLabel">波長 λ</div>
+          <div class="stValue"><span id="a_stLambda">—</span><span class="u">m</span></div>
+        </div>
+        <div class="statTile">
+          <div class="stLabel">振動数 f</div>
+          <div class="stValue"><span id="a_stF">450</span><span class="u">Hz</span></div>
+        </div>
+        <div class="statTile">
+          <div class="stLabel">音の速さ v（固定）</div>
+          <div class="stValue">340<span class="u">m/s</span></div>
+        </div>
+      </div>
+      <div class="meterRow">
+        <span class="meterLabel">共鳴度</span>
+        <div class="meterTrack"><div class="meterFill" id="a_meterFill"></div></div>
+        <span class="meterPct" id="a_meterPct">0%</span>
+      </div>
+      <div class="readout" id="a_statusBox">共鳴していません</div>
+
+      <div class="sechead">音</div>
+      <div class="btns">
+        <button class="b sound" id="a_bSound">🔈 音を鳴らす</button>
+      </div>
+
+      <div class="btns">
+        <div class="btnrow">
+          <button class="b primary" id="bPlay2">⏸ 一時停止</button>
+          <button class="b" id="bReset2">↺ リセット</button>
+        </div>
+      </div>
+    </div>
+  </div>
+   </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const PAD = 12;
+  const V_SOUND = 340;
+  const SHARPNESS = 0.15;   // resonance peak width, as a fraction of the gap between harmonics
+  const AIR_MAX_L = 5;      // longest selectable tube length (m), used as the fixed drawing scale
+  const AIR_LENGTHS = { closed: [1, 3, 5], open: [1, 2, 3] }; // selectable tube lengths per end type
+  const STRING_MAX_L = 3;   // longest selectable string length (m), used as the fixed drawing scale
+  const STRING_V = 150;     // fixed wave speed on the string (m/s)
+  const RESNAP_THRESHOLD = 0.75; // releasing the slider above this closeness starts the auto-pull to exact resonance
+  const RESNAP_TAU = 0.7;        // seconds — how "ゆっくり" the wavelength slides to resonance
+  const U_MIN = 0.5, U_MAX = 16; // slider range in harmonic-number units (see state.s_u)
+
+  const state = {
+    mode: "string",
+    playing: true,
+    visualPhase: 0,
+
+    s_L: 2,
+    // The wavelength slider is parametrised by u = 2L/λ (a continuous "harmonic
+    // number") rather than by λ itself. Harmonics sit at integer u, evenly
+    // spaced regardless of n, so high harmonics (8倍, 16倍…) get just as much
+    // slider travel as low ones — unlike a linear-λ slider, where adjacent
+    // harmonics crowd together as 2L/(n(n+1)) shrinks with n.
+    s_u: 2.5,
+    s_snapTarget: null,   // non-null while u is auto-easing toward this exact resonant harmonic number
+
+    a_L: 3, a_f: 450, a_end: "closed",
+    a_snapTarget: null,   // non-null while f is auto-easing toward this exact resonant frequency
+    a_particleMode: false, // show the medium as particles oscillating longitudinally, instead of the displacement curve
+
+    soundOn: false,
+  };
+
+  // ---- canvas ----
+  const cv = document.getElementById("cvR");
+  const ctx = cv.getContext("2d");
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+  let dim;
+  function sizeCanvas() {
+    const cssW = cv.clientWidth, cssH = cv.clientHeight;
+    cv.width = Math.max(1, Math.round(cssW * dpr));
+    cv.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dim = { w: cssW, h: cssH };
+  }
+  function layout() { dpr = Math.max(1, window.devicePixelRatio || 1); sizeCanvas(); }
+
+  // ---- resonance physics ----
+  // Every fixed-fixed / open-open / closed-open system has adjacent harmonics
+  // spaced by the same v/(2L) in frequency, so one shared "closeness" model
+  // (a Gaussian centred on the nearest allowed harmonic) works for all three.
+  function nearestHarmonic(f, L, v, parity) {
+    // Fixed-fixed / open-open resonators use f_n = n*v/(2L); closed-open
+    // uses f_m = m*v/(4L) with m odd only — same denominator the caller
+    // must also use when turning n back into f_n (see airInfo below).
+    const denom = parity === "odd" ? 4 : 2;
+    const raw = denom * L * f / v;
+    if (parity === "odd") {
+      let n = Math.round((raw - 1) / 2) * 2 + 1;
+      return Math.max(1, n);
+    }
+    return Math.max(1, Math.round(raw));
+  }
+  function closeness(f, fn, L, v) {
+    const spacing = v / (2 * L);
+    const d = (f - fn) / (spacing * SHARPNESS);
+    return Math.exp(-d * d);
+  }
+
+  function harmonicName(n) { return n === 1 ? "基本振動" : n + "倍振動"; }
+
+  function stringInfo() {
+    const L = state.s_L, v = STRING_V, u = state.s_u;
+    const lambda = 2 * L / u;
+    const f = u * v / (2 * L);
+    const n = nearestHarmonic(f, L, v, "any");
+    const fn = n * v / (2 * L);
+    const c = closeness(f, fn, L, v);
+    return { n, f, fn, lambda, nodes: n + 1, antinodes: n, c };
+  }
+
+  // Sync the on-screen λ readouts (slider's own label + the stat tile) from
+  // the current u/L. Called after anything that moves u or L.
+  function syncLambdaLabels() {
+    const lambda = stringInfo().lambda;
+    document.getElementById("s_vLambda").textContent = lambda.toFixed(2);
+    document.getElementById("s_stLambda").textContent = lambda.toFixed(2);
+  }
+
+  // Triggered when the student releases the wavelength slider close enough to
+  // a harmonic, or taps a 前の共鳴/次の共鳴 button. Glides u (not λ directly —
+  // see s_u above) the rest of the way to the exact integer harmonic instead
+  // of requiring pixel-perfect precision by hand.
+  function updateStringSnapAnim(dt) {
+    if (state.s_snapTarget == null) return;
+    const diff = state.s_snapTarget - state.s_u;
+    if (Math.abs(diff) < 0.002) {
+      state.s_u = state.s_snapTarget;
+      state.s_snapTarget = null;
+    } else {
+      state.s_u += diff * (1 - Math.exp(-dt / RESNAP_TAU));
+    }
+    document.getElementById("s_rU").value = state.s_u.toFixed(2);
+    syncLambdaLabels();
+  }
+  function airInfo() {
+    const { a_L: L, a_f: f, a_end: end } = state;
+    const parity = end === "closed" ? "odd" : "any";
+    const n = nearestHarmonic(f, L, V_SOUND, parity);
+    const denom = parity === "odd" ? 4 : 2;
+    const fn = n * V_SOUND / (denom * L);
+    const Ln = n * V_SOUND / (denom * f);   // the length that WOULD resonate at this n, for the current f
+    const lambda = V_SOUND / f;             // true instantaneous wavelength (not just the nearest harmonic's)
+    const c = closeness(f, fn, L, V_SOUND);
+    const nodes = end === "closed" ? (n + 1) / 2 : n;
+    const antinodes = end === "closed" ? (n + 1) / 2 : n + 1;
+    return { n, f, fn, Ln, lambda, nodes, antinodes, c };
+  }
+
+  // Sync the on-screen readouts (slider label + stat tiles) from the current
+  // a_f/a_L/a_end. Called after anything that moves them.
+  function syncAirLabels() {
+    const info = airInfo();
+    document.getElementById("a_vF").textContent = Math.round(state.a_f).toString();
+    document.getElementById("a_stF").textContent = Math.round(state.a_f).toString();
+    document.getElementById("a_stL").textContent = state.a_L.toString();
+    document.getElementById("a_stLambda").textContent = info.lambda.toFixed(2);
+  }
+
+  // Same idea as updateStringSnapAnim, but for air: glides the frequency
+  // itself toward the exact resonant value instead of λ/u.
+  function updateAirSnapAnim(dt) {
+    if (state.a_snapTarget == null) return;
+    const diff = state.a_snapTarget - state.a_f;
+    if (Math.abs(diff) < 0.3) {
+      state.a_f = state.a_snapTarget;
+      state.a_snapTarget = null;
+    } else {
+      state.a_f += diff * (1 - Math.exp(-dt / RESNAP_TAU));
+    }
+    document.getElementById("a_rF").value = state.a_f.toFixed(0);
+    syncAirLabels();
+  }
+
+  // ---- drawing helpers (shared style with the other wave tools) ----
+  function bg(w, h) { ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, w, h); }
+  function frame(w, h) { ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, w - 1, h - 1); }
+  function numLabel(text, x, y, align, color) {
+    ctx.font = '600 11px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(text).width, padX = 3;
+    let bx = x - padX;
+    if (align === "center") bx = x - tw / 2 - padX;
+    else if (align === "right") bx = x - tw - padX;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillRect(bx, y - 8, tw + padX * 2, 16);
+    ctx.fillStyle = color || "#64748b";
+    ctx.textAlign = align === "center" ? "center" : (align === "right" ? "right" : "left");
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+  function roundRectPath(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  // draws a rounded chip with its top-left corner at (x,y); returns its width
+  // so callers can stack several chips in a row.
+  function pillBadge(x, y, text, bgColor) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const tw = ctx.measureText(text).width, bw = tw + 22, bh = 28;
+    roundRectPath(x, y, bw, bh, 9);
+    ctx.fillStyle = bgColor; ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(text, x + bw / 2, y + bh / 2 + 0.5);
+    ctx.textAlign = "left";
+    return bw;
+  }
+  function badgeRight(w, y, text, bgColor) {
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    const bw = ctx.measureText(text).width + 22;
+    return pillBadge(w - PAD - bw, y, text, bgColor);
+  }
+  // Shared cap on how "thick" the vibrating region is allowed to look, in
+  // pixels — used to size the air column's tube AND to cap the string's
+  // amplitude, so the two modes read at the same visual scale.
+  function vibBand(h) { return Math.min(120, h * 0.45); }
+  // A dimension-line style bracket: "<--- label --->" spanning x1..x2 at
+  // height y, used to annotate a length (and its wavelength count) directly
+  // on the object. Drawn bigger/bolder than numLabel for at-a-glance reading.
+  function dimensionLine(x1, x2, y, label, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
+    const ah = 6, av = 5;
+    ctx.beginPath();
+    ctx.moveTo(x1 + ah, y - av); ctx.lineTo(x1, y); ctx.lineTo(x1 + ah, y + av);
+    ctx.moveTo(x2 - ah, y - av); ctx.lineTo(x2, y); ctx.lineTo(x2 - ah, y + av);
+    ctx.stroke();
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif';
+    ctx.textBaseline = "middle";
+    const tw = ctx.measureText(label).width, padX = 5;
+    const cx = (x1 + x2) / 2;
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillRect(cx - tw / 2 - padX, y - 11, tw + padX * 2, 22);
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.fillText(label, cx, y + 0.5);
+    ctx.textAlign = "left";
+  }
+  // Rounds a length-in-wavelengths ratio to 2dp, e.g. 2 -> 2, 1.25 -> 1.25.
+  function fmtLambdaMultiple(x) {
+    return Math.round(x * 100) / 100;
+  }
+  function drawString() {
+    const { w, h } = dim;
+    bg(w, h);
+    const midY = h / 2;
+    const info = stringInfo();
+    const L = state.s_L;
+    // fixed pixels-per-metre scale (based on the longest selectable length)
+    // so switching L visibly shortens/lengthens the drawn string.
+    const pxPerMeter = (w - 2 * PAD) / STRING_MAX_L;
+    const x2px = (xw) => PAD + xw * pxPerMeter;
+    const isResonant = info.c > 0.92;
+    const mainColor = isResonant ? "#dc2626" : "#4f46e5";
+
+    // faint full-range reference (up to the longest selectable length)
+    ctx.strokeStyle = "#f1f5f9"; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x2px(0), midY); ctx.lineTo(x2px(STRING_MAX_L), midY); ctx.stroke();
+    ctx.lineCap = "butt";
+
+    ctx.strokeStyle = "#cbd5e1"; ctx.lineWidth = 1.25;
+    ctx.beginPath(); ctx.moveTo(x2px(0), midY); ctx.lineTo(x2px(L), midY); ctx.stroke();
+
+    const shapeAt = (xw) => Math.sin(info.n * Math.PI * xw / L);
+    const timeFac = Math.cos(state.visualPhase);
+    // capped the same way as the air column's tube, so the two modes'
+    // vibration amplitudes read at the same visual scale.
+    const maxAmp = vibBand(h) / 2 - 6;
+    const envAmp = info.c * maxAmp;
+
+    // envelope (max excursion at each point) as a light dashed reference
+    ctx.strokeStyle = "#c7d2fe"; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+    [1, -1].forEach((sgn) => {
+      ctx.beginPath();
+      for (let px = x2px(0); px <= x2px(L); px++) {
+        const xw = (px - PAD) / pxPerMeter;
+        const y = midY - sgn * Math.abs(shapeAt(xw)) * envAmp;
+        if (px === x2px(0)) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+      }
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    // the string itself, as a single continuous line
+    ctx.beginPath();
+    for (let px = x2px(0); px <= x2px(L); px++) {
+      const xw = (px - PAD) / pxPerMeter;
+      const y = midY - shapeAt(xw) * timeFac * envAmp;
+      if (px === x2px(0)) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+    }
+    ctx.strokeStyle = mainColor; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.stroke();
+
+    ctx.fillStyle = "#1e293b";
+    [0, L].forEach((xw) => { ctx.beginPath(); ctx.arc(x2px(xw), midY, 6, 0, 7); ctx.fill(); });
+
+    numLabel("固定端", x2px(0), midY + 22, "left", "#475569");
+    numLabel("固定端", x2px(L), midY + 22, "right", "#475569");
+    numLabel("x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    // in-diagram dimension bracket: the string's length in metres, with the
+    // same span expressed as a multiple of the current wavelength alongside.
+    const yDim = midY + maxAmp + 24;
+    const dimLabel = L.toFixed(1) + "m(" + fmtLambdaMultiple(L / info.lambda) + "λ)";
+    dimensionLine(x2px(0), x2px(L), yDim, dimLabel, "#334155");
+
+    let lx = PAD;
+    lx += pillBadge(lx, 7, "L = " + L + " m", "rgba(79,70,229,0.92)") + 6;
+    pillBadge(lx, 7, "λ = " + info.lambda.toFixed(2) + " m", "rgba(217,119,6,0.92)");
+    if (isResonant) badgeRight(w, 7, harmonicName(info.n) + "で共鳴！", "rgba(220,38,38,0.92)");
+    frame(w, h);
+  }
+
+  function drawAir() {
+    const { w, h } = dim;
+    bg(w, h);
+    const midY = h / 2;
+    const info = airInfo();
+    const { a_L: L, a_end: end } = state;
+    // fixed pixels-per-metre scale (based on the longest selectable length)
+    // so switching L visibly shortens/lengthens the drawn tube — same idea
+    // as the string mode's fixed-scale drawing.
+    const pxPerMeter = (w - 2 * PAD) / AIR_MAX_L;
+    const x2px = (xw) => PAD + xw * pxPerMeter;
+    const xL = x2px(L);
+    const tubeH = vibBand(h);
+    const isResonant = info.c > 0.92;
+    const waveColor = isResonant ? "#dc2626" : "#f59e0b";
+
+    // faint full-range reference (up to the longest selectable length)
+    ctx.strokeStyle = "#f1f5f9"; ctx.lineWidth = tubeH; ctx.lineCap = "butt";
+    ctx.beginPath(); ctx.moveTo(x2px(0), midY); ctx.lineTo(x2px(AIR_MAX_L), midY); ctx.stroke();
+
+    ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x2px(0), midY - tubeH / 2); ctx.lineTo(xL, midY - tubeH / 2);
+    ctx.moveTo(x2px(0), midY + tubeH / 2); ctx.lineTo(xL, midY + tubeH / 2);
+    ctx.stroke();
+
+    if (end === "closed") {
+      const bw = 7;
+      ctx.fillStyle = "#475569";
+      ctx.fillRect(x2px(0) - bw, midY - tubeH / 2 - 4, bw, tubeH + 8);
+      numLabel("閉端", x2px(0) - bw - 2, midY - tubeH / 2 - 14, "left", "#475569");
+    } else {
+      numLabel("開端", x2px(0) - 2, midY - tubeH / 2 - 14, "left", "#94a3b8");
+    }
+    ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xL, midY - tubeH / 2 - 6); ctx.lineTo(xL + 8, midY - tubeH / 2 - 12);
+    ctx.moveTo(xL, midY + tubeH / 2 + 6); ctx.lineTo(xL + 8, midY + tubeH / 2 + 12);
+    ctx.stroke();
+    ctx.fillStyle = "#0f172a";
+    ctx.beginPath(); ctx.arc(xL, midY, 7, 0, 7); ctx.fill();
+    numLabel("開端", xL, midY - tubeH / 2 - 18, "center", "#0f172a");
+
+    const shapeAt = (xw) => end === "closed"
+      ? Math.sin(info.n * Math.PI * xw / (2 * L))
+      : Math.cos(info.n * Math.PI * xw / L);
+    const timeFac = Math.cos(state.visualPhase);
+    // cap the amplitude so the wave never visually exceeds the tube walls,
+    // even at full resonance (c=1).
+    const maxAmp = tubeH / 2 - 6;
+    const envAmp = info.c * maxAmp;
+
+    if (state.a_particleMode) {
+      // show the medium as particles oscillating along the tube's own axis
+      // (true longitudinal motion) instead of the usual displacement curve.
+      const spacing = 0.15; // metres between rest positions, matching the other longitudinal-wave tool
+      const particleAmp = spacing * 0.4 * info.c; // capped well under half the spacing so neighbours never cross
+      for (let x0 = 0; x0 <= L + 1e-9; x0 += spacing) {
+        const dx = shapeAt(x0) * timeFac * particleAmp;
+        ctx.fillStyle = "#cbd5e1";
+        ctx.beginPath(); ctx.arc(x2px(x0), midY, 2.5, 0, 7); ctx.fill();
+        ctx.fillStyle = waveColor;
+        ctx.beginPath(); ctx.arc(x2px(x0 + dx), midY, 5, 0, 7); ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = "#fde68a"; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      [1, -1].forEach((sgn) => {
+        ctx.beginPath();
+        for (let px = x2px(0); px <= xL; px++) {
+          const xw = (px - PAD) / pxPerMeter;
+          const y = midY + sgn * Math.abs(shapeAt(xw)) * envAmp;
+          if (px === x2px(0)) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+      });
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      for (let px = x2px(0); px <= xL; px++) {
+        const xw = (px - PAD) / pxPerMeter;
+        const y = midY - shapeAt(xw) * timeFac * envAmp;
+        if (px === x2px(0)) ctx.moveTo(px, y); else ctx.lineTo(px, y);
+      }
+      ctx.strokeStyle = waveColor; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.stroke();
+    }
+
+    numLabel("x [m]", w - PAD - 2, h - 11, "right", "#94a3b8");
+
+    // in-diagram dimension bracket: the tube's length in metres, with the
+    // same span expressed as a multiple of the current wavelength alongside.
+    const yDim = midY + maxAmp + 24;
+    const dimLabel = L.toFixed(1) + "m(" + fmtLambdaMultiple(L / info.lambda) + "λ)";
+    dimensionLine(x2px(0), xL, yDim, dimLabel, "#334155");
+
+    let lx = PAD;
+    lx += pillBadge(lx, 7, "L = " + L + " m", "rgba(79,70,229,0.92)") + 6;
+    pillBadge(lx, 7, "λ = " + info.lambda.toFixed(2) + " m", "rgba(217,119,6,0.92)");
+    if (isResonant) badgeRight(w, 7, harmonicName(info.n) + "で共鳴！", "rgba(220,38,38,0.92)");
+    frame(w, h);
+  }
+
+  function draw() {
+    if (state.mode === "string") drawString(); else drawAir();
+  }
+
+  // ---- animation ----
+  let last = null;
+  const VISUAL_HZ = 0.6;   // slowed-down demo rate, independent of the real f, shared by both modes
+  function loop(ts) {
+    if (last == null) last = ts;
+    const dt = Math.min(0.05, (ts - last) / 1000);
+    last = ts;
+    if (state.playing) state.visualPhase += 2 * Math.PI * VISUAL_HZ * dt;
+    if (state.mode === "string") updateStringSnapAnim(dt); else updateAirSnapAnim(dt);
+    updateAudio();
+    updateReadouts();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---- Web Audio ----
+  // Both modes now follow the same pattern: a plain sine tone at the current
+  // resonant frequency, with volume scaled by how close to resonance we are.
+  let audioCtx = null, oscNode = null, gainNode = null;
+  function startAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      if (!oscNode) {
+        oscNode = audioCtx.createOscillator();
+        gainNode = audioCtx.createGain();
+        oscNode.type = "sine";
+        gainNode.gain.value = 0;
+        oscNode.connect(gainNode).connect(audioCtx.destination);
+        oscNode.start();
+      }
+    } catch (err) { /* autoplay/gesture restrictions — nothing to do but stay silent */ }
+  }
+  function stopAudio() {
+    if (oscNode) { try { oscNode.stop(); } catch (e) {} oscNode.disconnect(); oscNode = null; }
+    if (gainNode) { gainNode.disconnect(); gainNode = null; }
+  }
+  function updateAudio() {
+    if (!state.soundOn || !oscNode || !gainNode || !audioCtx) return;
+    const info = state.mode === "string" ? stringInfo() : airInfo();
+    oscNode.frequency.setValueAtTime(info.f, audioCtx.currentTime);
+    gainNode.gain.setTargetAtTime(0.16 * info.c, audioCtx.currentTime, 0.03);
+  }
+
+  // ---- readouts ----
+
+  const a_stL = document.getElementById("a_stL"), a_stLambda = document.getElementById("a_stLambda"), a_stF = document.getElementById("a_stF");
+  const a_meterFill = document.getElementById("a_meterFill"), a_meterPct = document.getElementById("a_meterPct");
+  const a_statusBox = document.getElementById("a_statusBox");
+
+  const s_stF = document.getElementById("s_stF");
+  const s_meterFill = document.getElementById("s_meterFill"), s_meterPct = document.getElementById("s_meterPct");
+  const s_statusBox = document.getElementById("s_statusBox");
+
+  function updateReadouts() {
+    if (state.mode === "string") {
+      const info = stringInfo();
+      s_stF.textContent = info.f.toFixed(1);
+      const pct = Math.round(info.c * 100);
+      s_meterFill.style.width = pct + "%";
+      s_meterPct.textContent = pct + "%";
+      if (info.c > 0.92) {
+        s_statusBox.innerHTML = '<b style="color:#dc2626">🔴 ' + harmonicName(info.n) + 'で共鳴中！</b>';
+      } else {
+        s_statusBox.textContent = "共鳴していません（最も近いのは" + harmonicName(info.n) + "）";
+      }
+    } else if (state.mode === "air") {
+      const info = airInfo();
+      a_stL.textContent = state.a_L.toString();
+      a_stLambda.textContent = info.lambda.toFixed(2);
+      a_stF.textContent = Math.round(state.a_f).toString();
+      const pct = Math.round(info.c * 100);
+      a_meterFill.style.width = pct + "%";
+      a_meterPct.textContent = pct + "%";
+      if (info.c > 0.92) {
+        a_statusBox.innerHTML = '<b style="color:#dc2626">🔴 ' + harmonicName(info.n) + 'で共鳴中！</b>';
+      } else {
+        const parityNote = state.a_end === "closed" ? "・奇数倍のみ" : "";
+        a_statusBox.textContent = "共鳴していません（最も近いのは" + harmonicName(info.n) + parityNote + "）";
+      }
+    }
+  }
+
+  // ---- UI wiring ----
+  const segLenAir = document.getElementById("segLenAir");
+  function renderAirLenButtons() {
+    const opts = AIR_LENGTHS[state.a_end];
+    segLenAir.innerHTML = opts.map((L) =>
+      '<button data-l="' + L + '"' + (L === state.a_L ? ' class="on"' : '') + '>' + L + ' m</button>'
+    ).join("");
+  }
+  function setAirLength(L) {
+    state.a_L = L;
+    state.a_snapTarget = null; // the length changed — any in-progress pull toward an old target is now stale
+    [...segLenAir.children].forEach((b) => b.classList.toggle("on", +b.dataset.l === L));
+    syncAirLabels();
+  }
+  segLenAir.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setAirLength(+b.dataset.l); });
+
+  const a_rF = document.getElementById("a_rF");
+  a_rF.addEventListener("input", () => {
+    state.a_snapTarget = null; // the student grabbed the slider — cancel any auto-pull in progress
+    state.a_f = +a_rF.value;
+    syncAirLabels();
+  });
+  // Only when the student releases the slider: if they let go close enough
+  // to a harmonic, glide f the rest of the way to it.
+  a_rF.addEventListener("change", () => {
+    const info = airInfo();
+    state.a_snapTarget = (info.c >= RESNAP_THRESHOLD) ? info.fn : null;
+  });
+
+  // 前の共鳴／次の共鳴 buttons for air: jump to the adjacent valid harmonic
+  // (closed tubes only allow odd n) — precise even where the slider step is
+  // too coarse, or the harmonic spacing too tight, to land on it by hand.
+  function goToAirHarmonic(n) {
+    const denom = state.a_end === "closed" ? 4 : 2;
+    const f = Math.max(1, n) * V_SOUND / (denom * state.a_L);
+    state.a_snapTarget = Math.max(10, Math.min(2000, f));
+  }
+  document.getElementById("a_bPrevN").addEventListener("click", () => {
+    const parity = state.a_end === "closed" ? "odd" : "any";
+    const denom = parity === "odd" ? 4 : 2;
+    const raw = denom * state.a_L * state.a_f / V_SOUND;
+    if (parity === "odd") {
+      const m = (raw - 1) / 2;
+      goToAirHarmonic(2 * Math.max(0, Math.ceil(m - 1e-6) - 1) + 1);
+    } else {
+      goToAirHarmonic(Math.max(1, Math.ceil(raw - 1e-6) - 1));
+    }
+  });
+  document.getElementById("a_bNextN").addEventListener("click", () => {
+    const parity = state.a_end === "closed" ? "odd" : "any";
+    const denom = parity === "odd" ? 4 : 2;
+    const raw = denom * state.a_L * state.a_f / V_SOUND;
+    if (parity === "odd") {
+      const m = (raw - 1) / 2;
+      goToAirHarmonic(2 * (Math.floor(m + 1e-6) + 1) + 1);
+    } else {
+      goToAirHarmonic(Math.floor(raw + 1e-6) + 1);
+    }
+  });
+
+  const s_stL = document.getElementById("s_stL"), s_stLambda = document.getElementById("s_stLambda");
+  const s_rU = document.getElementById("s_rU");
+  s_rU.addEventListener("input", () => {
+    state.s_snapTarget = null; // the student grabbed the slider — cancel any auto-pull in progress
+    state.s_u = +s_rU.value;
+    syncLambdaLabels();
+  });
+  // Only when the student releases the slider: if they let go close enough
+  // to a harmonic, glide u the rest of the way to it.
+  s_rU.addEventListener("change", () => {
+    const info = stringInfo();
+    state.s_snapTarget = (info.c >= RESNAP_THRESHOLD) ? info.n : null;
+  });
+
+  // 前の共鳴／次の共鳴 buttons: jump straight to an adjacent integer harmonic —
+  // precise even where the slider itself is too coarse to land on it (very
+  // high n, e.g. 16倍振動, where the physical λ gap between harmonics is tiny).
+  function goToHarmonic(n) { state.s_snapTarget = Math.max(1, Math.min(U_MAX, n)); }
+  document.getElementById("s_bPrevN").addEventListener("click", () => {
+    goToHarmonic(Math.ceil(state.s_u - 1e-6) - 1);
+  });
+  document.getElementById("s_bNextN").addEventListener("click", () => {
+    goToHarmonic(Math.floor(state.s_u + 1e-6) + 1);
+  });
+
+  const segLen = document.getElementById("segLen");
+  function setStringLength(L) {
+    state.s_L = L;
+    state.s_snapTarget = null;
+    [...segLen.children].forEach(b => b.classList.toggle("on", +b.dataset.l === L));
+    s_stL.textContent = L;
+    syncLambdaLabels();
+  }
+  segLen.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setStringLength(+b.dataset.l); });
+
+  document.getElementById("s_bReset").addEventListener("click", () => {
+    state.s_u = 2.5;
+    state.s_snapTarget = null;
+    s_rU.value = "2.5";
+    syncLambdaLabels();
+    state.playing = true; syncPlayBtn();
+  });
+
+  const segEndAir = document.getElementById("segEndAir");
+  function setAirEnd(end) {
+    state.a_end = end;
+    state.a_L = AIR_LENGTHS[end][1]; // the middle option is a sensible default for either tube type
+    state.a_snapTarget = null; // which frequencies are resonant depends on parity — any pull in progress is now stale
+    [...segEndAir.children].forEach(b => b.classList.toggle("on", b.dataset.end === end));
+    renderAirLenButtons();
+    syncAirLabels();
+  }
+  segEndAir.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setAirEnd(b.dataset.end); });
+
+  document.getElementById("a_particleMode").addEventListener("change", (e) => {
+    state.a_particleMode = e.target.checked;
+    updateGraphHead();
+  });
+
+  function syncPlayBtn() {
+    const txt = state.playing ? "⏸ 一時停止" : "▶ 再生";
+    document.getElementById("bPlay").textContent = txt;
+    document.getElementById("bPlay2").textContent = txt;
+  }
+  function togglePlay() { state.playing = !state.playing; syncPlayBtn(); }
+  document.getElementById("bPlay").addEventListener("click", togglePlay);
+  document.getElementById("bPlay2").addEventListener("click", togglePlay);
+
+  // String mode's own reset button is wired separately (s_bReset), just
+  // above. This one is air mode's full reset.
+  function resetAir() {
+    state.a_L = AIR_LENGTHS[state.a_end][1]; state.a_f = 450; state.a_snapTarget = null;
+    renderAirLenButtons();
+    document.getElementById("a_rF").value = 450;
+    syncAirLabels();
+    state.playing = true; syncPlayBtn();
+  }
+  document.getElementById("bReset2").addEventListener("click", resetAir);
+
+  function syncSoundBtns() {
+    const label = state.soundOn ? "🔇 音を止める" : "🔈 音を鳴らす";
+    document.getElementById("s_bSound").textContent = label;
+    document.getElementById("s_bSound").classList.toggle("on", state.soundOn);
+    document.getElementById("a_bSound").textContent = label;
+    document.getElementById("a_bSound").classList.toggle("on", state.soundOn);
+  }
+  function toggleSound() {
+    state.soundOn = !state.soundOn;
+    if (state.soundOn) startAudio(); else stopAudio();
+    syncSoundBtns();
+  }
+  document.getElementById("s_bSound").addEventListener("click", toggleSound);
+  document.getElementById("a_bSound").addEventListener("click", toggleSound);
+
+  const graphName = document.getElementById("graphName");
+  const graphDesc = document.getElementById("graphDesc");
+  const headerSub = document.getElementById("headerSub");
+  function updateGraphHead() {
+    if (state.mode === "string") {
+      graphName.textContent = "① 弦の振動";
+      graphDesc.textContent = "　両端固定の弦（点線＝振幅の包絡線、赤＝共鳴中）";
+      headerSub.textContent = "波長λを変えて、弦が共鳴して大きく振動する条件を探そう";
+    } else {
+      const endTxt = state.a_end === "closed" ? "閉管" : "開管";
+      graphName.textContent = "② 気柱の共鳴（" + endTxt + "）";
+      graphDesc.textContent = state.a_particleMode
+        ? "　横軸 = 位置 x（灰＝媒質の元の位置、色付き＝実際の位置。赤＝共鳴中）"
+        : "　横軸 = 位置 x（点線＝振幅の包絡線、赤＝共鳴中）";
+      headerSub.textContent = "管の長さLや振動数fを変えて、共鳴する条件を探そう";
+    }
+  }
+
+  const segMode = document.getElementById("segMode");
+  function setMode(m) {
+    state.mode = m;
+    [...segMode.children].forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+    document.getElementById("stringCtls").style.display = m === "string" ? "" : "none";
+    document.getElementById("airCtls").style.display = m === "air" ? "" : "none";
+    if (state.soundOn) { state.soundOn = false; stopAudio(); syncSoundBtns(); }
+    updateGraphHead();
+  }
+  segMode.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.mode); });
+
+  window.addEventListener("resize", () => { layout(); draw(); });
+  window.addEventListener("load", () => { layout(); draw(); });
+  window.addEventListener("orientationchange", () => { layout(); draw(); });
+  const ro = new ResizeObserver(() => { layout(); draw(); });
+  ro.observe(cv);
+
+  // ---- init ----
+  layout();
+  updateGraphHead();
+  renderAirLenButtons();
+  syncPlayBtn();
+  syncSoundBtns();
+  updateReadouts();
+  requestAnimationFrame(loop);
+})();
+</script>
