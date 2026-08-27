@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>縦波と横波表示</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info, #info2 {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	color: #4a4038;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<span class="grp">
+		<button id="m1" onclick="setMenu(1)">進行波</button>
+		<button id="m2" onclick="setMenu(2)">定常波</button>
+	</span>
+	<span class="grp">
+		<button id="c1" onclick="setColor(1)">緑</button>
+		<button id="c2" onclick="setColor(2)">赤球・青球</button>
+	</span>
+</div>
+
+<div id="info2">
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画速度↑</button>
+		<button onclick="down()">描画速度↓</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   縦波と横波表示
+   上：横波表示（媒質の変位を縦にとったグラフ）
+   下：実際の縦波（媒質そのものが左右に振動する）
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 図の基準の大きさ
+const MT = 50;                  // 上の余白
+const MR = 80;                  // 右の余白：x 軸の矢印より右に空ける
+const VWmin = 1100;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin;
+
+/* ---------- 配置（仮想座標） ---------- */
+const TRANS_Y = 235;            // 上：横波表示の x 軸の高さ
+const MED_Y   = 490;            // 下：媒質が並ぶ線の高さ
+const UE      = 150;            // 縦線の上端
+const SHITA   = 560;            // 縦線の下端
+
+/* ---------- 波のパラメータ ---------- */
+const ramda = 800;              // 波長 λ
+const tt    = 8;                // 周期 T
+const AMP   = 60;               // 振幅（媒質が左右に動く幅）
+const dxs   = 40;               // 媒質の間隔
+const x0    = 3 * dxs;          // 波の基準の位置（120）
+
+const BG    = "#faf4ee";        // 背景（生成り色）
+const AXIS  = "#000000";        // 座標軸・文字
+const GRID  = "#999999";        // 目盛りの線
+const GREEN = "#00b800";        // 媒質の粒
+
+/* ---------- 状態 ---------- */
+let t = 0;
+let dt = 0.08;
+let menu = 1;                   // 1:進行波 2:定常波
+let color = 1;                  // 1:緑だけ 2:赤球・青球つき
+let paused = false;
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+
+	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
+	// 縦と横で同じ倍率を使うので波の形も変わらない
+	let k = cv.height / (VH + MT);
+	k = Math.min(k, cv.width / (VWmin + MR));
+	kx = k;
+	ky = k;
+	// 横は、画面に入るぶんだけ軸を伸ばす
+	VWv = cv.width / k - MR;
+	offY = (cv.height - (VH + MT) * k) / 2;
+
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+function vSeg(vx, vy1, vy2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx * kx, vy1 * ky);
+	ctx.lineTo(vx * kx, vy2 * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function hSeg(vy, vx1, vx2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx1 * kx, vy * ky);
+	ctx.lineTo(vx2 * kx, vy * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 右向きの矢印
+function arrowRight(vx, vy) {
+	const w = 128 * 0.15 * ky;
+	const h = 128 * 0.20 * ky;
+	const x = vx * kx, y = vy * ky;
+	ctx.fillStyle = AXIS;
+	ctx.beginPath();
+	ctx.moveTo(x + h / 2, y);
+	ctx.lineTo(x - h / 2, y - w / 2);
+	ctx.lineTo(x - h / 2, y + w / 2);
+	ctx.closePath();
+	ctx.fill();
+}
+
+// 媒質の粒（緑の丸）
+function dot(vx, vy, diaPx) {
+	ctx.fillStyle = GREEN;
+	ctx.beginPath();
+	ctx.arc(vx * kx, vy * ky, diaPx / 2, 0, 2 * PI);
+	ctx.fill();
+}
+
+// 目印になる立体的な玉
+function sphere(vx, vy, diaPx, kind) {
+	const cx = vx * kx, cy = vy * ky, r = diaPx / 2;
+	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
+	if (kind === "red") {
+		g.addColorStop(0.00, "#fff2f0");
+		g.addColorStop(0.35, "#ff9d9b");
+		g.addColorStop(0.75, "#ff4a48");
+		g.addColorStop(1.00, "#d40000");
+	} else {
+		g.addColorStop(0.00, "#f0f0fd");
+		g.addColorStop(0.35, "#9d9dfc");
+		g.addColorStop(0.75, "#4a4afc");
+		g.addColorStop(1.00, "#0000d4");
+	}
+	ctx.fillStyle = g;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, 0, 2 * PI);
+	ctx.fill();
+}
+
+// 見出し。線の上に重ねても読めるよう、背景色で下地を塗る
+function title(str, vx, vy) {
+	ctx.save();
+	ctx.font = (26 * kx) + "px 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif";
+	ctx.textAlign = "left";
+	ctx.textBaseline = "middle";
+	const x = vx * kx, y = vy * ky;
+	const w = ctx.measureText(str).width;
+	const pad = 10 * kx;
+	ctx.fillStyle = BG;
+	ctx.fillRect(x - pad, y - 20 * ky, w + pad * 2, 40 * ky);
+	ctx.fillStyle = AXIS;
+	ctx.fillText(str, x, y);
+	ctx.restore();
+}
+
+/* ============================================================
+   媒質の変位
+   正の値を「左向きの変位」とする。こうすると横波表示では
+   右向きの変位が上向きになり、教科書の決まりと一致する
+   ============================================================ */
+function disp(vx) {
+	if (menu === 2) {   // 定常波：位置ごとに振れ幅が決まっていて、進まない
+		return AMP * sin(2 * PI * (vx - x0) / ramda) * sin(2 * PI * t / tt);
+	}
+	return AMP * sin(2 * PI * (t / tt - (vx - x0) / ramda));   // 進行波
+}
+
+/* ============================================================
+   背景（目盛りと軸）
+   ============================================================ */
+function drawStage() {
+	// 背景は画面いっぱいに塗る
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+
+	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	// λ/2 ごとの縦線。上下のグラフを貫いて、同じ位置どうしを結ぶ
+	for (let vx = x0; vx <= VWv; vx += ramda / 2) {
+		vSeg(vx, UE, SHITA, 1, GRID);
+	}
+
+	// 上：横波表示。振幅の目印と x 軸
+	hSeg(TRANS_Y - AMP, 0, VWv, 1, GRID);
+	hSeg(TRANS_Y + AMP, 0, VWv, 1, GRID);
+	hSeg(TRANS_Y, 0, VWv, 1.5, AXIS);
+	arrowRight(VWv - 10, TRANS_Y);
+
+	// 下：媒質が並ぶ線
+	hSeg(MED_Y, 0, VWv, 1.5, AXIS);
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	drawStage();
+
+	const dDot = 128 * 0.20 * kx;   // 緑の粒の直径
+	const dBlue = 80 * 0.47 * kx;   // 青玉の直径
+	const dRed  = 80 * 0.40 * kx;   // 赤玉の直径
+
+	// 媒質の粒。上は変位を縦にとった点、下は実際にずれた位置の粒
+	for (let i = -2 * dxs; i < VWv + 2 * dxs; i += dxs) {
+		const fy = disp(i);
+		dot(i,      TRANS_Y + fy, dDot);   // 横波表示：x はそのまま、y が変位
+		dot(i - fy, MED_Y,        dDot);   // 実際の縦波：x がずれる、y は一定
+	}
+
+	if (color !== 2) return;
+
+	// 目印の玉。定常波では青＝節、赤＝腹になる
+	const blueStep = (menu === 2) ? ramda / 2 : ramda;
+	const redFrom  = (menu === 2) ? x0 + ramda / 4 : x0 + ramda / 2;
+	const redStep  = (menu === 2) ? ramda / 2 : ramda;
+
+	for (let vx = x0; vx < VWv; vx += blueStep) {
+		const fy = disp(vx);
+		sphere(vx,      TRANS_Y + fy, dBlue, "blue");
+		sphere(vx - fy, MED_Y,        dBlue, "blue");
+	}
+	for (let vx = redFrom; vx < VWv; vx += redStep) {
+		const fy = disp(vx);
+		sphere(vx,      TRANS_Y + fy, dRed, "red");
+		sphere(vx - fy, MED_Y,        dRed, "red");
+	}
+}
+
+/* ============================================================
+   見出しは玉より手前に描く
+   ============================================================ */
+function drawTitles() {
+	title("横波表示（変位を縦にとったもの）", x0 + 10, 118);
+	title("実際の縦波（媒質が左右に動く）",   x0 + 10, 398);
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function animate() {
+	draw();
+	drawTitles();
+	if (!paused) t += dt;
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function setMenu(n) { menu = n; t = 0; markButtons(); draw(); }
+function setColor(n) { color = n; markButtons(); draw(); }
+
+function stop() { paused = !paused; }
+function up()   { dt += 0.02; if (dt > 0.40) dt = 0.40; }
+function down() { dt -= 0.02; if (dt < 0)    dt = 0; }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	for (let n = 1; n <= 2; n++) {
+		document.getElementById("m" + n).classList.toggle("on", menu === n);
+		document.getElementById("c" + n).classList.toggle("on", color === n);
+	}
+}
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+markButtons();
+animate();
+</script>
+</body>
+</html>
