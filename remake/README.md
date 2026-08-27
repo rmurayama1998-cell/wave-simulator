@@ -1,7 +1,6 @@
-# 波のシミュレーション（参考作成版）
+# 波のシミュレーション
 
-他サイトのシミュレーションを参考に、あらためて作りなおしたものです。
-本体（`../`）にある自作ツールとは分けて、このフォルダにまとめています。
+進行波・媒質の振動・波の合成の3つをまとめたフォルダです。
 
 インストール不要・ログイン不要。外部リソースに依存しない単一のHTMLなので、一度読み込めばオフラインでも動きます。横向きの画面で使ってください。
 
@@ -61,21 +60,3 @@
 |---|---|
 | URL | https://rmurayama1998-cell.github.io/wave-simulator/remake/composite-wave.html |
 | QRコード | `qr-composite-wave.png` |
-
-## 参考にしたサイト
-
-構成・操作の流れは [物理シミュレーション（physics.cloudfree.jp）](https://physics.cloudfree.jp/) の以下のページを参考にしました。コードはすべて新たに書き起こしたもので、画像などの素材は使用していません（描画はすべて HTML5 Canvas）。
-
-| 本フォルダ | 参考にしたページ |
-|---|---|
-| `traveling.html` | https://physics.cloudfree.jp/main/osci_wave/shinkouha-hakei5-m/index.html |
-| `oscillation.html` | https://physics.cloudfree.jp/main/osci_wave/shinkouha-shindou2-m/index.html |
-| `composite-wave.html` | https://physics.cloudfree.jp/main/osci_wave/gousei2-m/index.html |
-
-元サイトから変えた主な点
-
-- 配色を生成り色の背景・黒い座標軸にし、プロジェクター投影と動画の切り抜きに向くようにした
-- 画面の高さを基準に拡大し、横は入るぶんだけ軸を伸ばす方式にした（画面の形が変わっても波の形＝振幅と波長の比が変わらない）
-- 軸の先端（矢印）の外側に余白を設けた
-- `traveling.html` に波長・振動数を変えるボタンを追加した
-- `composite-wave.html` の定常波の腹・節が、画面幅によらず必ず目盛り線の上に来るようにした

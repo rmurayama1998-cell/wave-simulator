@@ -34,39 +34,67 @@ canvas#myCanvas {
 }
 
 #info, #info2 {
-	text-align: center;
 	position: fixed;
 	left: 0;
 	width: 100%;
-	margin: auto;
-	font-size: clamp(11px, 1.5vw, 22px);
-	color: #000000;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	color: #4a4038;
 }
 #info  { bottom: 9vh; }
 #info2 { bottom: 2vh; }
 
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
 button {
-	margin-left: 0.5vw;
-	margin-right: 0.5vw;
-	padding: 0.2em 0.5em;
-	background-color: #e8e8e8;
-	border: 1px solid #b0b0b0;
-	border-radius: 3px;
-	color: #000000;
-	font-size: clamp(11px, 1.4vw, 22px);
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
 	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
 	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
 }
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
 button.on {
-	background-color: #303030;
-	border-color: #303030;
-	color: #ffffff;
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
 }
+button.on:hover { background: #4a4038; }
+
+/* 実行ボタン */
 button.go {
-	background-color: #c8e6c9;
-	border-color: #6c9e6e;
-	font-weight: bold;
+	background: #0f7a3d;
+	color: #ffffff;
+	box-shadow: 0 3px 10px rgba(15, 122, 61, 0.32);
 }
+button.go:hover { background: #128a45; }
 </style>
 </head>
 <body>
@@ -74,25 +102,28 @@ button.go {
 <canvas id="myCanvas"></canvas>
 
 <div id="info">
-	（<button id="b1" onclick="baishitsu(1)">媒質１</button>
-	<button id="b2" onclick="baishitsu(2)">媒質２</button>
-	<button id="b3" onclick="baishitsu(3)">媒質３</button>
-	<button id="b4" onclick="baishitsu(4)">媒質４</button>）
-	&nbsp;&nbsp;
+	<span class="grp">
+		<button id="b1" onclick="baishitsu(1)">媒質１</button>
+		<button id="b2" onclick="baishitsu(2)">媒質２</button>
+		<button id="b3" onclick="baishitsu(3)">媒質３</button>
+		<button id="b4" onclick="baishitsu(4)">媒質４</button>
+	</span>
 	<button class="go" onclick="start()">スタート</button>
-	&nbsp;&nbsp;
-	（<button id="h3" onclick="hakei(3)">パルス波</button>
-	<button id="h2" onclick="hakei(2)">正弦波</button>
-	<button id="h1" onclick="hakei(1)">連続波</button>
-	<button onclick="shinpuku()">振幅反転</button>）
+	<span class="grp">
+		<button id="h3" onclick="hakei(3)">パルス波</button>
+		<button id="h2" onclick="hakei(2)">正弦波</button>
+		<button id="h1" onclick="hakei(1)">連続波</button>
+		<button onclick="shinpuku()">振幅反転</button>
+	</span>
 </div>
 
 <div id="info2">
-	<button onclick="stop()">停止／再開</button>
-	<button onclick="up()">描画↑</button>
-	<button onclick="down()">描画↓</button>
-	&nbsp;&nbsp;&nbsp;&nbsp;
-	<button onclick="buttonBack()">戻 る</button>
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
 </div>
 
 <script>
