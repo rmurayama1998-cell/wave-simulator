@@ -119,6 +119,14 @@ button.go:hover { background: #128a45; }
 
 <div id="info2">
 	<span class="grp">
+		<button onclick="addRamda(-RAMDA_STEP)">波長 −</button>
+		<button onclick="addRamda(RAMDA_STEP)">波長 ＋</button>
+	</span>
+	<span class="grp">
+		<button onclick="addFreq(-1)">振動数 −</button>
+		<button onclick="addFreq(1)">振動数 ＋</button>
+	</span>
+	<span class="grp">
 		<button onclick="stop()">停止／再開</button>
 		<button onclick="up()">描画↑</button>
 		<button onclick="down()">描画↓</button>
@@ -160,9 +168,17 @@ const BAND2 = [340, 633];       // 下のグラフを描く範囲（y）
 const BAND2X = 330;             // 下のグラフの左端
 
 /* ---------- 波のパラメータ ---------- */
-const ramda = 400;              // 波長 λ
-const tt    = 8;                // 周期 T
-const v     = ramda / tt;       // 波の速さ
+// 波長 λ：ボタンで 200〜800 の間を 100 きざみで変える
+const RAMDA_MIN = 200, RAMDA_MAX = 800, RAMDA_STEP = 100;
+// 周期 T の候補。右へ行くほど周期が短い＝振動数が大きい
+const TT_LIST = [16, 13, 10, 8, 6, 5, 4];
+let ttIndex = 3;                // いま使っている TT_LIST の番号
+let ramda = 400;                // 波長 λ
+let tt    = TT_LIST[ttIndex];   // 周期 T
+let v     = ramda / tt;         // 波の速さ v ＝ λ / T
+// y-t グラフのペンが進む速さ。これは時間軸の目盛りなので、
+// 波長や振動数を変えても一定にしておく
+const PEN = 50;
 const dx    = 3;                // 球の間隔
 
 const BG    = "#faf4ee";        // 背景（生成り色）
@@ -328,8 +344,12 @@ function drawStage() {
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
 
 	// λ/2 ごとの目盛りの縦線（原点をはさんで、画面に入るだけ引く）
+	// 上のグラフ（y-x）は λ/2 ごと
 	for (let vx = x0 - ramda / 2; vx <= VWv; vx += ramda / 2) {
 		vSeg(vx, BAND1[0], BAND1[1], 1, GRID);
+	}
+	// 下のグラフ（y-t）は T/2 ごと（ペンが半周期で進む距離）
+	for (let vx = x0; vx <= VWv; vx += PEN * tt / 2) {
 		if (vx >= BAND2X) vSeg(vx, BAND2[0], BAND2[1], 1, GRID);
 	}
 
@@ -409,7 +429,7 @@ function update() {
 
 	t += dt;
 	if (menu !== 1) wave_top += v * dt;
-	pen += v * dt;
+	pen += PEN * dt;
 	trace.push([pen, s]);
 
 	if (pen >= VWv) endTimer = 90;  // 約1.5秒待ってから最初に戻る
@@ -440,6 +460,26 @@ function start()  { graph_start = 1; }
 function baishitsu(n) { target = n; init(); }
 function hakei(n) { menu = n; init(); }
 function shinpuku() { ampSign = -ampSign; init(); }
+
+/* ---------- 波長・振動数を変える ---------- */
+// 波長を変えると、上の y-x グラフの波の形が変わる
+function addRamda(d) {
+	const next = ramda + d;
+	if (next < RAMDA_MIN || next > RAMDA_MAX) return;
+	ramda = next;
+	v = ramda / tt;
+	init();
+}
+
+// 振動数を変えると、下の y-t グラフの周期の幅が変わる
+function addFreq(d) {
+	const next = ttIndex + d;
+	if (next < 0 || next >= TT_LIST.length) return;
+	ttIndex = next;
+	tt = TT_LIST[ttIndex];
+	v = ramda / tt;
+	init();
+}
 
 function stop() { paused = !paused; }
 function up()   { dt += 0.02; if (dt > 1.0) dt = 1.0; }
