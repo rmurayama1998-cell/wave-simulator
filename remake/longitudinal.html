@@ -544,9 +544,12 @@ function convUpdate() {
 	const cTarget = (cstep >= CSTEP_MAX) ? 1 : 0;
 	if (conn !== cTarget) conn = clamp01(conn + Math.sign(cTarget - conn) * f / 1.0);
 
+	// いまの段階の動きが終わったら次へ。
+	// 「dispP が 1 になったら」ではなく「いまの段階の目標に達したら」で判定する
+	// （最初の状態は dispP が 0 のままなので、1 を待つと進まなくなる）
 	if (cauto) {
-		if (cstep < CSTEP_MAX && dispP >= 1 && rotIdx >= rTarget) cstep++;
 		if (cstep >= CSTEP_MAX) cauto = false;
+		else if (dispP === dTarget && rotIdx >= rTarget) cstep++;
 	}
 }
 
