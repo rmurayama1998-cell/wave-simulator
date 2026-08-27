@@ -388,31 +388,8 @@ function drawWallZone() {
 }
 
 function drawWallEnd() {
-	// 端そのもの（縦の棒）
+	// 端そのもの（縦の棒）。自由端か固定端かは、端での波のふるまいで見せる
 	vSeg(wallX, UE, SHITA, 7, WALLC);
-
-	const cx = wallX * kx;
-	if (hansha === 1) {
-		// 自由端：棒を上下に滑るリング。合成波の変位のぶんだけ動く
-		const cy = (CY - dispSum(wallX)) * ky;
-		ctx.save();
-		ctx.beginPath();
-		ctx.arc(cx, cy, 30 * kx, 0, 2 * PI);
-		ctx.fillStyle = BG;
-		ctx.fill();
-		ctx.lineWidth = 9 * kx;
-		ctx.strokeStyle = WALLC;
-		ctx.stroke();
-		ctx.restore();
-	} else {
-		// 固定端：端は棒に留められていて動かない
-		ctx.save();
-		ctx.beginPath();
-		ctx.arc(cx, CY * ky, 15 * kx, 0, 2 * PI);
-		ctx.fillStyle = WALLC;
-		ctx.fill();
-		ctx.restore();
-	}
 }
 
 /* ============================================================
