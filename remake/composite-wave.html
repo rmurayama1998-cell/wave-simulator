@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>波の合成と定常波</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info, #info2 {
+	text-align: center;
+	position: fixed;
+	left: 0;
+	width: 100%;
+	margin: auto;
+	font-size: clamp(11px, 1.5vw, 22px);
+	color: #000000;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+button {
+	margin-left: 0.5vw;
+	margin-right: 0.5vw;
+	padding: 0.2em 0.5em;
+	background-color: #e8e8e8;
+	border: 1px solid #b0b0b0;
+	border-radius: 3px;
+	color: #000000;
+	font-size: clamp(11px, 1.4vw, 22px);
+	font-family: inherit;
+	cursor: pointer;
+}
+button.on {
+	background-color: #303030;
+	border-color: #303030;
+	color: #ffffff;
+}
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<button id="m1" onclick="setMenu(1)">パルス１</button>
+	<button id="m2" onclick="setMenu(2)">パルス２</button>
+	<button id="m3" onclick="setMenu(3)">正弦波</button>
+	<button id="m4" onclick="setMenu(4)">進行波</button>
+	<button id="m5" onclick="setMenu(5)">定常波</button>
+
+	&nbsp;&nbsp;&nbsp;
+	<button onclick="buttonBack()">　戻る　</button>
+</div>
+
+<div id="info2">
+	（<button id="n3" onclick="setNami(3)">合成波</button>
+	<button id="n1" onclick="setNami(1)">入射波</button>
+	<button id="n2" onclick="setNami(2)">入射波･合成波</button>）
+	（<button id="i1" onclick="setIsou(1)">同位相</button>
+	<button id="i2" onclick="setIsou(2)">逆位相</button>）
+
+	&nbsp;&nbsp;
+	<button onclick="stop()">停止／再開</button>
+	<button onclick="up()">描画↑</button>
+	<button onclick="down()">描画↓</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   波の合成と定常波
+   左から進む波（青）と右から進む波（赤）を重ね合わせ、
+   合成波（緑）を描く。
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 図の基準の大きさ
+const MT = 50;                  // 上の余白：y 軸の矢印より上に空ける
+const MR = 80;                  // 右の余白：x 軸の矢印より右に空ける
+const VWmin = 1200;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin;
+
+/* ---------- 配置（仮想座標） ---------- */
+const CY    = 324;              // 波の中心線（x 軸）の高さ
+const AMP   = 140;              // 入射波 1 本の振幅（合成波は最大その 2 倍）
+const UE    = 4;                // 縦線の上端
+const SHITA = 620;              // 縦線の下端
+
+/* ---------- 波のパラメータ ---------- */
+const ramda = 600;              // 波長 λ
+const tt    = 10;               // 周期 T
+const dxs   = 2;                // 球の間隔
+const xtop0 = ramda / 2;        // 波の先頭のスタート位置
+const dt0   = dxs * tt / ramda; // 1コマで dxs だけ波が進む時間
+const dtDef = dt0 * 2;          // ふだんの描画速度（1コマで dxs の2倍進む）
+const dtStep = dt0 / 4;         // 「描画↑↓」1回で変わる量
+const PW2   = ramda / 2;        // パルス２（く形波）の幅
+
+const BG    = "#faf4ee";        // 背景（生成り色）
+const AXIS  = "#000000";        // 座標軸
+const GRID  = "#999999";        // 目盛りの線
+const GREEN = "#00b800";        // 合成波
+const BLUE  = "#0060d0";        // 右へ進む入射波
+const RED   = "#e00000";        // 左へ進む入射波
+
+/* ---------- 状態 ---------- */
+let t = 0;
+let dt = dtDef;
+let menu = 1;                   // 1:パルス1 2:パルス2 3:正弦波 4:進行波 5:定常波
+let nami = 3;                   // 1:入射波 2:入射波と合成波 3:合成波
+let isou = 1;                   // 1:同位相 2:逆位相
+let paused = false;
+let wait = 45;                  // 始まりと終わりの「ため」
+let x0 = 82;                    // y 軸の位置（＝定常波の腹の位置）
+let pstart = xtop0;             // パルスの出発位置（下で微調整する）
+
+/* ============================================================
+   パルスの出発位置
+   左右のパルスがぴったり重なる瞬間が、コマの切れ目にちょうど
+   来るように出発位置を少しだけずらす。こうしないと、逆位相のとき
+   1コマ分ずれた細い波が残って、完全には打ち消し合わない
+   ============================================================ */
+function refreshPulseStart() {
+	if (menu > 2) { pstart = xtop0; return; }
+	const w = (menu === 1) ? ramda / 2 : PW2;   // パルスの幅
+	const stepD = ramda / tt * dt;              // 1コマで波が進む距離
+	if (stepD <= 0) { pstart = xtop0; return; }
+	const mid = (VWv + w) / 2;
+	const n = Math.round((mid - xtop0) / stepD);
+	pstart = mid - n * stepD;
+}
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+
+	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
+	// 縦と横で同じ倍率を使うので波の形（振幅と波長の比）も変わらない
+	let k = cv.height / (VH + MT);
+	k = Math.min(k, cv.width / (VWmin + MR));
+	kx = k;
+	ky = k;
+	// 横は、画面に入るぶんだけ x 軸を伸ばす
+	VWv = cv.width / k - MR;
+	offY = (cv.height - (VH + MT) * k) / 2;
+
+	// 定常波の腹は画面の中央から λ/2 ごとに並ぶ。
+	// y 軸はその中でいちばん左のものに合わせる（目盛りと腹がそろう）
+	const half = VWv / 2;
+	const m = Math.max(0, Math.floor((half - 60) / (ramda / 2)));
+	x0 = half - m * ramda / 2;
+	refreshPulseStart();
+
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+function vSeg(vx, vy1, vy2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx * kx, vy1 * ky);
+	ctx.lineTo(vx * kx, vy2 * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function hSeg(vy, vx1, vx2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx1 * kx, vy * ky);
+	ctx.lineTo(vx2 * kx, vy * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 矢印（up: 上向き / right: 右向き）
+function arrow(vx, vy, dir) {
+	const w = 128 * 0.15 * ky;
+	const h = 128 * 0.20 * ky;
+	const x = vx * kx, y = vy * ky;
+	ctx.fillStyle = AXIS;
+	ctx.beginPath();
+	if (dir === "up") {
+		ctx.moveTo(x, y - h / 2);
+		ctx.lineTo(x - w / 2, y + h / 2);
+		ctx.lineTo(x + w / 2, y + h / 2);
+	} else {
+		ctx.moveTo(x + h / 2, y);
+		ctx.lineTo(x - h / 2, y - w / 2);
+		ctx.lineTo(x - h / 2, y + w / 2);
+	}
+	ctx.closePath();
+	ctx.fill();
+}
+
+// 波を描く。点の並びを同じ太さの線でつなぐ（null で線が切れる）。
+// く形波のとがった頂点も、これならきれいに出る
+function drawWave(pts, thickPx, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = thickPx;
+	ctx.lineCap = "round";
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	let started = false;
+	for (const p of pts) {
+		if (p === null) { started = false; continue; }
+		const x = p[0] * kx, y = p[1] * ky;
+		if (!started) { ctx.moveTo(x, y); ctx.lineTo(x, y); started = true; }
+		else ctx.lineTo(x, y);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 節・腹の目印になる立体的な玉
+function sphere(vx, vy, diaPx, kind) {
+	const cx = vx * kx, cy = vy * ky, r = diaPx / 2;
+	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
+	if (kind === "red") {
+		g.addColorStop(0.00, "#fff2f0");
+		g.addColorStop(0.35, "#ff9d9b");
+		g.addColorStop(0.75, "#ff4a48");
+		g.addColorStop(1.00, "#d40000");
+	} else {
+		g.addColorStop(0.00, "#f0f0fd");
+		g.addColorStop(0.35, "#9d9dfc");
+		g.addColorStop(0.75, "#4a4afc");
+		g.addColorStop(1.00, "#0000d4");
+	}
+	ctx.fillStyle = g;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, 0, 2 * PI);
+	ctx.fill();
+}
+
+/* ============================================================
+   2つの入射波の変位
+   その場所に波が来ていなければ null を返す
+   ============================================================ */
+// 進行波・定常波のときだけ位相をずらして、定常波の腹が y 軸に来るようにする
+function phaseShift() { return (menu >= 4) ? x0 : 0; }
+
+// く形波（三角パルス）。right はパルスの右端。
+// 中央がいちばん高く、両端で 0 になる山
+function kuPulse(xx, right, amp) {
+	const half = PW2 / 2;
+	const u = xx - (right - half);                    // 山の中心からのずれ
+	return amp * (1 - Math.abs(u) / half);
+}
+
+// 左から右へ進む波（青）
+function dispB(xx) {
+	const xtop = ramda / tt * t + pstart + 1;             // 波の先頭
+	if (menu <= 3) {
+		const xend = (menu === 1) ? xtop - ramda / 2
+		           : (menu === 2) ? xtop - PW2
+		           : -1e9;                                 // 正弦波は後ろがずっと続く
+		if (xx >= xtop || xx <= xend) return null;
+	}
+	if (menu === 2) return kuPulse(xx, xtop, AMP);        // く形波
+	return -AMP * sin(2 * PI * (t / tt - (xx - phaseShift()) / ramda));
+}
+
+// 右から左へ進む波（赤）。逆位相のときは振幅の符号を変える
+function dispR(xx) {
+	const xtop = VWv - ramda / tt * t - pstart + 1;       // 波の先頭（左端）
+	if (menu <= 3) {
+		const xend = (menu === 1) ? xtop + ramda / 2
+		           : (menu === 2) ? xtop + PW2
+		           : 1e9;
+		if (xx <= xtop || xx >= xend) return null;
+	}
+	const amp = (isou === 1) ? AMP : -AMP;
+	if (menu === 2) return kuPulse(xx, xtop + PW2, amp);  // く形波
+	return -amp * sin(2 * PI * (t / tt + (xx - VWv + phaseShift()) / ramda));
+}
+
+// 合成波の変位（重ね合わせの原理：ふたつの変位の和）
+function dispSum(xx) {
+	return (dispB(xx) || 0) + (dispR(xx) || 0);
+}
+
+/* ============================================================
+   背景（目盛りと座標軸）
+   ============================================================ */
+function drawStage() {
+	// 背景は画面いっぱいに塗る
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+
+	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	// λ/2 ごとの目盛りの縦線（定常波の腹・節の位置に合わせて左端から引く）
+	const g0 = x0 - Math.floor(x0 / (ramda / 2)) * (ramda / 2);
+	for (let vx = g0; vx <= VWv; vx += ramda / 2) {
+		vSeg(vx, UE, SHITA, 1, GRID);
+	}
+
+	// 振幅の目印（入射波1本分と、合成波の最大）
+	for (let i = -2; i <= 2; i++) {
+		if (i !== 0) hSeg(CY + AMP * i, 0, VWv, 1, GRID);
+	}
+
+	// x 軸
+	hSeg(CY, 0, VWv, 2, AXIS);
+	arrow(VWv - 10, CY, "right");
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	drawStage();
+
+	const wSum = 80 * 0.30 * kx;       // 合成波の線の太さ
+	const wIn  = 80 * 0.20 * kx;       // 入射波の線の太さ（細い）
+	const dia  = 80 * 0.50 * kx;       // 節・腹の玉の直径
+
+	const ptsG = [], ptsB = [], ptsR = [];
+	for (let xx = 0; xx < VWv; xx += dxs) {
+		const b = dispB(xx);
+		const r = dispR(xx);
+		// 合成波（緑）は端から端まで。波が来ていない所は平ら
+		ptsG.push([xx, CY - ((b || 0) + (r || 0))]);
+		// 入射波（青・赤）は、波が来ている所だけ
+		ptsB.push(b === null ? null : [xx, CY - b]);
+		ptsR.push(r === null ? null : [xx, CY - r]);
+	}
+
+	if (nami !== 1) drawWave(ptsG, wSum, GREEN);
+	if (nami !== 3) {
+		drawWave(ptsB, wIn, BLUE);
+		drawWave(ptsR, wIn, RED);
+	}
+
+	// 定常波：腹と節に玉を置く（逆位相にすると入れかわる）
+	if (menu === 5) {
+		for (let x = x0; x <= VWv; x += ramda / 2) {
+			sphere(x, (isou === 1) ? CY - dispSum(x) : CY, dia, "red");
+		}
+		for (let x = x0 + ramda / 4; x <= VWv; x += ramda / 2) {
+			sphere(x, (isou === 1) ? CY : CY - dispSum(x), dia, "blue");
+		}
+	}
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function update() {
+	if (wait > 0) { wait--; return; }
+
+	const xtop1 = ramda / tt * t + pstart + 1;
+	if (menu === 1 && xtop1 > VWv + ramda * 0.55) { t = 0; wait = 45; return; }
+	if (menu === 2 && xtop1 > VWv + PW2 + 60)     { t = 0; wait = 45; return; }
+	if (menu === 3 && xtop1 > VWv + ramda * 2)    { t = 0; wait = 45; return; }
+
+	t += dt;
+}
+
+function animate() {
+	draw();
+	if (!paused) update();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function init() { t = 0; dt = dtDef; wait = 45; refreshPulseStart(); markButtons(); draw(); }
+
+function setMenu(n) {
+	menu = n;
+	if (n === 5) nami = 3;     // 定常波はまず合成波だけを見せる
+	init();
+}
+function setNami(n) { nami = n; init(); }
+function setIsou(n) { isou = n; init(); }
+
+function stop() { paused = !paused; }
+function up()   { dt += dtStep; if (dt > dt0 * 6) dt = dt0 * 6; refreshPulseStart(); }
+function down() { dt -= dtStep; if (dt < 0) dt = 0; refreshPulseStart(); }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	for (let n = 1; n <= 5; n++) {
+		document.getElementById("m" + n).classList.toggle("on", menu === n);
+	}
+	for (let n = 1; n <= 3; n++) {
+		document.getElementById("n" + n).classList.toggle("on", nami === n);
+	}
+	for (let n = 1; n <= 2; n++) {
+		document.getElementById("i" + n).classList.toggle("on", isou === n);
+	}
+}
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+init();
+animate();
+</script>
+</body>
+</html>

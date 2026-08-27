@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>波と媒質の振動（y-x グラフと y-t グラフ）</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info, #info2 {
+	text-align: center;
+	position: fixed;
+	left: 0;
+	width: 100%;
+	margin: auto;
+	font-size: clamp(11px, 1.5vw, 22px);
+	color: #000000;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+button {
+	margin-left: 0.5vw;
+	margin-right: 0.5vw;
+	padding: 0.2em 0.5em;
+	background-color: #e8e8e8;
+	border: 1px solid #b0b0b0;
+	border-radius: 3px;
+	color: #000000;
+	font-size: clamp(11px, 1.4vw, 22px);
+	font-family: inherit;
+	cursor: pointer;
+}
+button.on {
+	background-color: #303030;
+	border-color: #303030;
+	color: #ffffff;
+}
+button.go {
+	background-color: #c8e6c9;
+	border-color: #6c9e6e;
+	font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	（<button id="b1" onclick="baishitsu(1)">媒質１</button>
+	<button id="b2" onclick="baishitsu(2)">媒質２</button>
+	<button id="b3" onclick="baishitsu(3)">媒質３</button>
+	<button id="b4" onclick="baishitsu(4)">媒質４</button>）
+	&nbsp;&nbsp;
+	<button class="go" onclick="start()">スタート</button>
+	&nbsp;&nbsp;
+	（<button id="h3" onclick="hakei(3)">パルス波</button>
+	<button id="h2" onclick="hakei(2)">正弦波</button>
+	<button id="h1" onclick="hakei(1)">連続波</button>
+	<button onclick="shinpuku()">振幅反転</button>）
+</div>
+
+<div id="info2">
+	<button onclick="stop()">停止／再開</button>
+	<button onclick="up()">描画↑</button>
+	<button onclick="down()">描画↓</button>
+	&nbsp;&nbsp;&nbsp;&nbsp;
+	<button onclick="buttonBack()">戻 る</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   波と媒質の振動
+   上：y-x グラフ（波形そのもの）
+   下：y-t グラフ（選んだ媒質1点の変位を時間で追ったもの）
+   仮想座標系 1366 x 768 を画面いっぱいに引き伸ばして描画する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 仮想画面サイズ（図そのものの大きさ）
+const MT = 50;                  // 上の余白：y 軸の矢印より上に空ける
+const MR = 80;                  // 右の余白：x 軸・t 軸の矢印より右に空ける
+const VWmin = 1100;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin;
+
+/* ---------- 配置（仮想座標） ---------- */
+const x0   = 366;               // 両グラフの y 軸の位置
+const AX1  = 162;               // y-x グラフの x 軸の高さ
+const AX2  = 486;               // y-t グラフの t 軸の高さ
+const AMP  = 100;               // 振幅
+const TOPY = 20;                // 縦線の上端
+const BAND1 = [20, 305];        // 上のグラフを描く範囲（y）
+const BAND2 = [340, 633];       // 下のグラフを描く範囲（y）
+const BAND2X = 330;             // 下のグラフの左端
+
+/* ---------- 波のパラメータ ---------- */
+const ramda = 400;              // 波長 λ
+const tt    = 8;                // 周期 T
+const v     = ramda / tt;       // 波の速さ
+const dx    = 3;                // 球の間隔
+
+const BG    = "#faf4ee";        // 背景（生成り色）
+const AXIS  = "#000000";        // 座標軸・文字
+const GRID  = "#999999";        // 目盛りの線
+const GREEN = "#00b800";        // 波（y-x グラフ）
+const REDL  = "#e01020";        // 振動の軌跡（y-t グラフ）
+
+/* ---------- 状態 ---------- */
+let t = 0;                      // 時間
+let dt = 0.05;                  // 1コマで進む時間（描画速度）
+let t3 = 0;                     // スタート直後の間
+let wave_top = x0;              // 波の先頭の位置
+let pen = x0;                   // y-t グラフを描くペンの位置
+let trace = [];                 // y-t グラフの軌跡
+let ampSign = 1;                // 振幅反転用
+let menu = 3;                   // 1:連続波 2:正弦波 3:パルス波
+let target = 1;                 // 注目する媒質 1〜4
+let graph_start = 0;            // スタートを押したか
+let paused = false;
+let endTimer = 0;               // 描き終わってからの待ち時間
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
+	// 縦と横で同じ倍率を使うので波の形（振幅と波長の比）も変わらない
+	let k = cv.height / (VH + MT);
+	// ただし画面が細長いときは、横が VWmin より狭くならないように縮める
+	k = Math.min(k, cv.width / (VWmin + MR));
+	kx = k;
+	ky = k;
+	// 横は、画面に入るぶんだけ x 軸・t 軸を伸ばす
+	VWv = cv.width / k - MR;
+	offY = (cv.height - (VH + MT) * k) / 2;
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+// 縦線（vy1 から vy2 まで）
+function vSeg(vx, vy1, vy2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx * kx, vy1 * ky);
+	ctx.lineTo(vx * kx, vy2 * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 横線（vx1 から vx2 まで）
+function hSeg(vy, vx1, vx2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx1 * kx, vy * ky);
+	ctx.lineTo(vx2 * kx, vy * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 矢印（up: 上向き / right: 右向き）
+function arrow(vx, vy, dir) {
+	const w = 128 * 0.15 * ky;
+	const h = 128 * 0.20 * ky;
+	const x = vx * kx, y = vy * ky;
+	ctx.fillStyle = AXIS;
+	ctx.beginPath();
+	if (dir === "up") {
+		ctx.moveTo(x, y - h / 2);
+		ctx.lineTo(x - w / 2, y + h / 2);
+		ctx.lineTo(x + w / 2, y + h / 2);
+	} else {
+		ctx.moveTo(x + h / 2, y);
+		ctx.lineTo(x - h / 2, y - w / 2);
+		ctx.lineTo(x - h / 2, y + w / 2);
+	}
+	ctx.closePath();
+	ctx.fill();
+}
+
+// 波を作る丸い球（x は仮想座標、y は実ピクセル）
+function dot(vx, yPx, rPx, col) {
+	ctx.fillStyle = col;
+	ctx.beginPath();
+	ctx.arc(vx * kx, yPx, rPx, 0, 2 * PI);
+	ctx.fill();
+}
+
+// 媒質の球（立体的な赤玉）
+function sphere(vx, yPx, diaPx) {
+	const cx = vx * kx, cy = yPx, r = diaPx / 2;
+	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
+	g.addColorStop(0.00, "#fff2f0");
+	g.addColorStop(0.35, "#ff9d9b");
+	g.addColorStop(0.75, "#ff4a48");
+	g.addColorStop(1.00, "#d40000");
+	ctx.fillStyle = g;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, 0, 2 * PI);
+	ctx.fill();
+}
+
+// 軸のラベル（O・x・y・t）
+function label(str, vx, vy, size) {
+	ctx.save();
+	ctx.fillStyle = AXIS;
+	ctx.font = "italic " + (size * ky) + "px 'Times New Roman', Georgia, serif";
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	ctx.fillText(str, vx * kx, vy * ky);
+	ctx.restore();
+}
+
+// グラフの見出し
+function title(str, vx, vy) {
+	ctx.save();
+	ctx.fillStyle = AXIS;
+	ctx.font = (26 * kx) + "px 'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif";
+	ctx.textAlign = "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(str, vx * kx, vy * ky);
+	ctx.restore();
+}
+
+/* ============================================================
+   波の変位（戻り値は実ピクセルのずれ）
+   ============================================================ */
+function ampPx() { return -AMP * ky * ampSign; }
+
+// 位置 vx における、いまの変位の比（-1 〜 1）
+function waveS(vx) {
+	if (menu === 3) {                             // パルス波：1波長ぶんだけ
+		if (vx > wave_top || vx < wave_top - ramda) return 0;
+	} else if (menu === 2) {                      // 正弦波：先頭から後ろへ続く
+		if (vx > wave_top) return 0;
+	}
+	return sin(2 * PI * (t / tt - (vx - x0) / ramda));
+}
+
+/* ============================================================
+   背景（目盛りと座標軸）
+   ============================================================ */
+function drawStage() {
+	// 背景は画面いっぱいに塗る
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+
+	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	// λ/2 ごとの目盛りの縦線（原点をはさんで、画面に入るだけ引く）
+	for (let vx = x0 - ramda / 2; vx <= VWv; vx += ramda / 2) {
+		vSeg(vx, BAND1[0], BAND1[1], 1, GRID);
+		if (vx >= BAND2X) vSeg(vx, BAND2[0], BAND2[1], 1, GRID);
+	}
+
+	// 振幅の目印（山と谷の高さ）
+	hSeg(AX1 - AMP, 0, VWv, 1, GRID);
+	hSeg(AX1 + AMP, 0, VWv, 1, GRID);
+	hSeg(AX2 - AMP, BAND2X, VWv, 1, GRID);
+	hSeg(AX2 + AMP, BAND2X, VWv, 1, GRID);
+
+	// 上のグラフ（y-x）の座標軸
+	vSeg(x0, BAND1[0], BAND1[1], 1.5, AXIS);
+	arrow(x0, TOPY + 9, "up");
+	hSeg(AX1, 0, VWv, 1.5, AXIS);
+	arrow(VWv - 10, AX1, "right");
+	label("O", x0 - 15, AX1 + 18, 30);
+	label("y", x0 - 20, AX1 - 135, 30);
+	label("x", VWv - 30, AX1 + 25, 36);
+
+	// 下のグラフ（y-t）の座標軸
+	vSeg(x0, BAND2[0], BAND2[1], 1.5, AXIS);
+	arrow(x0, BAND2[0] + 12, "up");
+	hSeg(AX2, BAND2X, VWv, 1.5, AXIS);
+	arrow(VWv - 10, AX2, "right");
+	label("O", x0 - 15, AX2 + 18, 30);
+	label("y", x0 - 20, AX2 - 135, 30);
+	label("t", VWv - 20, AX2 + 25, 36);
+
+	// 見出し（横幅に合わせて位置を決める）
+	title("y－x グラフ（波形）", VWv * 0.51, TOPY + 4);
+	title("y－t グラフ（媒質の振動）", VWv * 0.51, BAND2[0] + 10);
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	drawStage();
+
+	const rDot = 64 * 0.25 * kx / 2;   // 波の球の半径
+	const dia  = 80 * 0.40 * kx;       // 媒質の球の直径
+	const A    = ampPx();
+
+	// 上：波形
+	for (let i = 0; i < VWv; i += dx) {
+		dot(i, AX1 * ky + A * waveS(i), rDot, GREEN);
+	}
+
+	// 下：y-t グラフの軌跡
+	for (const p of trace) {
+		dot(p[0], AX2 * ky + A * p[1], rDot, REDL);
+	}
+
+	// 注目している媒質
+	const x2 = x0 + ramda / 4 * (target - 1);
+	const s  = waveS(x2);
+	sphere(x2,  AX1 * ky + A * s, dia);   // 波の上の媒質
+	sphere(pen, AX2 * ky + A * s, dia);   // y-t グラフを描くペン
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function update() {
+	// 描き終わったあとの待ち時間
+	if (endTimer > 0) {
+		endTimer--;
+		if (endTimer === 0) init();
+		return;
+	}
+	if (graph_start !== 1) return;
+
+	// スタート直後の少しの間
+	if (t3 < 3) { t3 += dt; return; }
+
+	const x2 = x0 + ramda / 4 * (target - 1);
+	const s  = waveS(x2);
+
+	t += dt;
+	if (menu !== 1) wave_top += v * dt;
+	pen += v * dt;
+	trace.push([pen, s]);
+
+	if (pen >= VWv) endTimer = 90;  // 約1.5秒待ってから最初に戻る
+}
+
+function animate() {
+	draw();
+	if (!paused) update();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function init() {
+	t = 0; t3 = 0;
+	wave_top = x0;
+	pen = x0;
+	trace = [];
+	dt = 0.05;
+	endTimer = 0;
+	graph_start = 0;
+	markButtons();
+	draw();
+}
+
+function start()  { graph_start = 1; }
+function baishitsu(n) { target = n; init(); }
+function hakei(n) { menu = n; init(); }
+function shinpuku() { ampSign = -ampSign; init(); }
+
+function stop() { paused = !paused; }
+function up()   { dt += 0.02; if (dt > 1.0) dt = 1.0; }
+function down() { dt -= 0.02; if (dt < 0)   dt = 0; }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	for (let n = 1; n <= 4; n++) {
+		document.getElementById("b" + n).classList.toggle("on", target === n);
+	}
+	for (let n = 1; n <= 3; n++) {
+		document.getElementById("h" + n).classList.toggle("on", menu === n);
+	}
+}
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+init();
+animate();
+</script>
+</body>
+</html>

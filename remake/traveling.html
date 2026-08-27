@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>進行波の波形</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info, #info2 {
+	text-align: center;
+	position: fixed;
+	left: 0;
+	width: 100%;
+	margin: auto;
+	font-size: clamp(11px, 1.5vw, 22px);
+	color: #000000;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+button {
+	margin-left: 1.5vw;
+	margin-right: 1.5vw;
+	padding: 0.2em 0.5em;
+	background-color: #e8e8e8;
+	border: 1px solid #b0b0b0;
+	border-radius: 3px;
+	color: #000000;
+	font-size: clamp(11px, 1.4vw, 22px);
+	font-family: inherit;
+	cursor: pointer;
+}
+button.on {
+	background-color: #303030;
+	border-color: #303030;
+	color: #ffffff;
+}
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<button id="m1" onclick="pulse1()">波形1</button>
+	<button id="m2" onclick="pulse2()">波形2</button>
+	<button id="m3" onclick="seigen()">波形3</button>
+	<button id="m4" onclick="shinkou()">連続波</button>
+
+	&nbsp;&nbsp;
+	（<button onclick="addRamda(-RAMDA_STEP)">波長 −</button>
+	<button onclick="addRamda(RAMDA_STEP)">波長 ＋</button>）
+	（<button onclick="addFreq(-1)">振動数 −</button>
+	<button onclick="addFreq(1)">振動数 ＋</button>）
+</div>
+
+<div id="info2">
+	(<button id="c1" onclick="color1()">緑球</button>
+	<button id="c2" onclick="color2()">赤球</button>
+	<button id="c3" onclick="color3()">青球</button>
+	<button id="c4" onclick="color4()">赤･青球</button>)
+
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+	<button onclick="stop()">停止／再開</button>
+	<button id="up">描画↑</button>
+	<button id="down">描画↓</button>
+
+	&nbsp;&nbsp;
+	<button onclick="buttonBack()">　戻る　</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   進行波の波形シミュレーション
+   仮想座標系 1366 x 768 を画面いっぱいに引き伸ばして描画する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 仮想画面サイズ（図そのものの大きさ）
+const MT = 70;                  // 上の余白：y 軸の矢印より上に空ける
+const MR = 80;                  // 右の余白：x 軸の矢印より右に空ける
+const VWmin = 1000;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin;
+
+/* ---------- 波のパラメータ ---------- */
+// 波長 λ：ボタンで 200〜1200 の間を 100 きざみで変える
+const RAMDA_MIN = 200, RAMDA_MAX = 1200, RAMDA_STEP = 100;
+// 周期 T の候補。右へ行くほど周期が短い＝振動数が大きい
+const TT_LIST = [16, 12, 10, 8, 6, 5, 4, 3];
+let ttIndex = 3;                // いま使っている TT_LIST の番号
+let ramda = 600;                // 波長 λ [仮想px]
+let tt    = TT_LIST[ttIndex];   // 周期 T
+let V     = ramda / tt;         // 波の速さ v ＝ λ / T
+const dx    = 4;                // 球の間隔
+const AX    = 315;              // x 軸の高さ（波が上下に振れる中心）
+const a     = 265;              // 振幅（山が y 軸の先端近くまで届く大きさ）
+const BG    = "#faf4ee";        // 背景（生成り色）
+const AXIS  = "#000000";        // 座標軸・文字
+const GRID  = "#999999";        // 目盛りの線
+const GREEN = "#00b800";        // 波の色
+
+/* ---------- 時間まわり ---------- */
+let t = 0,  dt  = 0.08;               // 本体の時間（dt = 描画速度）
+let t2 = 0, dt2 = 1, t_pause2 = 75;   // スタート前の待ち
+let t3 = 0, dt3 = 1, t_pause3 = 75;   // 終了後の待ち
+
+let menu = 1;                   // 1:波形1 2:波形2 3:波形3 4:連続波
+let color = 1;                  // 1:緑のみ 2:+赤球 3:+青球 4:赤青
+let paused = false;
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
+	// 縦と横で同じ倍率を使うので波の形（振幅と波長の比）も変わらない
+	let k = cv.height / (VH + MT);
+	// ただし画面が細長いときは、横が VWmin より狭くならないように縮める
+	k = Math.min(k, cv.width / (VWmin + MR));
+	kx = k;
+	ky = k;
+	// 横は、画面に入るぶんだけ x 軸を伸ばす
+	VWv = cv.width / k - MR;
+	offY = (cv.height - (VH + MT) * k) / 2;
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+function vLine(vx, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx * kx, 0);
+	ctx.lineTo(vx * kx, VH * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function hLine(vy, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(0, vy * ky);
+	ctx.lineTo(VWv * kx, vy * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 矢印（up: 上向き / right: 右向き）
+function arrow(vx, vy, dir) {
+	const w = 128 * 0.15 * ky;   // 幅
+	const h = 128 * 0.20 * ky;   // 長さ
+	const x = vx * kx, y = vy * ky;
+	ctx.fillStyle = AXIS;
+	ctx.beginPath();
+	if (dir === "up") {
+		ctx.moveTo(x, y - h / 2);
+		ctx.lineTo(x - w / 2, y + h / 2);
+		ctx.lineTo(x + w / 2, y + h / 2);
+	} else {
+		ctx.moveTo(x + h / 2, y);
+		ctx.lineTo(x - h / 2, y - w / 2);
+		ctx.lineTo(x - h / 2, y + w / 2);
+	}
+	ctx.closePath();
+	ctx.fill();
+}
+
+// 波を作る小さな四角
+function square(vx, vy, sizePx, col) {
+	ctx.fillStyle = col;
+	ctx.fillRect(vx * kx - sizePx / 2, vy * ky - sizePx / 2, sizePx, sizePx);
+}
+
+// 媒質の球（立体的な玉）
+function sphere(vx, vy, diaPx, kind) {
+	const cx = vx * kx, cy = vy * ky, r = diaPx / 2;
+	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
+	if (kind === "red") {
+		g.addColorStop(0.00, "#fff2f0");
+		g.addColorStop(0.35, "#ff9d9b");
+		g.addColorStop(0.75, "#ff4a48");
+		g.addColorStop(1.00, "#d40000");
+	} else {
+		g.addColorStop(0.00, "#f0f0fd");
+		g.addColorStop(0.35, "#9d9dfc");
+		g.addColorStop(0.75, "#4a4afc");
+		g.addColorStop(1.00, "#0000d4");
+	}
+	ctx.fillStyle = g;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, 0, 2 * PI);
+	ctx.fill();
+}
+
+// 軸のラベル（O・x・y）
+function label(str, vx, vy) {
+	ctx.save();
+	ctx.fillStyle = AXIS;
+	ctx.font = "italic " + (44 * ky) + "px 'Times New Roman', Georgia, serif";
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	ctx.fillText(str, vx * kx, vy * ky);
+	ctx.restore();
+}
+
+// 波を起こす手（左から伸びて、つまんだ指先が原点にある）
+function drawHand(vx, vy) {
+	const s = 0.3 * kx;              // 手の絵（584x401）に対する倍率
+	ctx.save();
+	ctx.translate(vx * kx, vy * ky);
+	ctx.scale(s, s);
+	ctx.translate(-584, -200);       // 指先（右端・中央）を基準点にする
+
+	ctx.beginPath();
+	// 手の外側
+	ctx.moveTo(-40, 72);
+	ctx.bezierCurveTo(120, 50, 250, 38, 336, 12);
+	ctx.bezierCurveTo(410, -12, 480, 14, 520, 58);    // 手の甲・指のつけ根
+	ctx.bezierCurveTo(552, 96, 578, 152, 580, 196);   // 指の外側
+	ctx.bezierCurveTo(582, 226, 566, 246, 540, 250);  // 指先
+	ctx.bezierCurveTo(562, 258, 552, 268, 500, 272);  // 親指の下
+	ctx.bezierCurveTo(400, 280, 180, 286, -40, 290);
+	ctx.closePath();
+	// 人差し指と親指でつまんだすき間（穴）
+	ctx.moveTo(356, 170);
+	ctx.bezierCurveTo(392, 150, 452, 148, 496, 168);
+	ctx.bezierCurveTo(524, 180, 534, 196, 528, 208);
+	ctx.bezierCurveTo(506, 220, 452, 210, 408, 196);
+	ctx.bezierCurveTo(376, 186, 356, 180, 356, 170);
+	ctx.closePath();
+
+	ctx.fillStyle = "#ffd4a1";
+	ctx.fill("evenodd");
+	ctx.lineJoin = "round";
+	ctx.lineWidth = 9;
+	ctx.strokeStyle = "#222222";
+	ctx.stroke();
+
+	// 指の分かれ目
+	ctx.beginPath();
+	ctx.moveTo(374, 34);
+	ctx.bezierCurveTo(432, 58, 488, 96, 524, 148);
+	ctx.lineWidth = 6;
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.moveTo(316, 44);
+	ctx.bezierCurveTo(332, 34, 348, 34, 362, 44);
+	ctx.lineWidth = 5;
+	ctx.stroke();
+
+	ctx.restore();
+}
+
+/* ============================================================
+   背景（目盛りと座標軸）
+   ============================================================ */
+function drawStage() {
+	// 背景は画面いっぱいに塗る
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+
+	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	// λ/2 ごとの目盛りの縦線（画面に入るだけ引く）
+	for (let i = 0; 100 + i * ramda / 2 <= VWv; i++) vLine(100 + i * ramda / 2, 1, GRID);
+
+	// λ・2λ の位置は黒い太線（1波長分・2波長分の目印）
+	for (let i = 1; i <= 2 && 100 + i * ramda <= VWv; i++) vLine(100 + i * ramda, 2, AXIS);
+
+	// 振幅の目印（山と谷の高さ）
+	hLine(AX - a, 1, GRID);
+	hLine(AX + a, 1, GRID);
+
+	// y 軸
+	vLine(100, 2, AXIS);
+	arrow(100, 10, "up");
+	label("O", 75, AX + 30);
+	label("y", 75, 35);
+
+	// x 軸
+	hLine(AX, 2, AXIS);
+	arrow(VWv - 10, AX, "right");
+	label("x", VWv - 30, AX + 35);
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+// 位置 i における、いまの波の高さ（仮想座標の y）
+function waveY(i) {
+	if (menu === 4) {                       // 連続波：どこまでも続く
+		return AX + a * sin(2 * PI * (t / tt - (i - 100) / ramda));
+	}
+	const xxtop = V * t + 100;              // 波の先頭
+	const xxend = (menu === 3) ? xxtop - ramda * 5 : xxtop - ramda / 2;
+	if (i <= xxtop && i >= xxend) {
+		const s = a * sin(2 * PI * (t / tt - (i - 100) / ramda));
+		return (menu === 2) ? AX + s : AX - s;
+	}
+	return AX;                              // 波がまだ来ていない／通り過ぎた所
+}
+
+function draw() {
+	drawStage();
+
+	const gSize = 32 * 0.50 * kx;   // 緑の球の大きさ
+	const bDia  = 80 * 0.50 * kx;   // 媒質の球の直径
+
+	// 波（連続波は左端から、パルスは原点から右に描く）
+	// 波長が短いほど波形が急になるので、球の間隔もつめて線が途切れないようにする
+	const step = Math.min(dx, dx * ramda / 600);
+	const start = (menu === 4) ? 0 : 100;
+	for (let i = start; i < VWv; i += step) square(i, waveY(i), gSize, GREEN);
+
+	// 波を起こす手
+	if (menu <= 3) drawHand(105, waveY(100) - 10);
+
+	// 媒質の球（赤は λ ごと、青はそこから λ/2 ずれた位置）
+	if (color === 2 || color === 4) {
+		for (let x = 100; x < VWv; x += ramda) sphere(x, waveY(x), bDia, "red");
+	}
+	if (color === 3 || color === 4) {
+		for (let x = 100 + ramda / 2; x < VWv; x += ramda) sphere(x, waveY(x), bDia, "blue");
+	}
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function update() {
+	if (menu >= 1 && menu <= 3) {
+		const xxtop = V * t + 100;
+
+		if (menu <= 2 && xxtop > VWv + ramda * 0.5) { t = 0; t2 = 0; }
+
+		if (menu === 3 && xxtop > VWv + ramda * (2 + 0.385)) {
+			if (t3 >= t_pause3) { t = 0; t2 = 0; t3 = 0; } else { t3 += dt3; }
+		} else {
+			if (t2 >= t_pause2) { t += dt; } else { t2 += dt2; t = 0; }
+		}
+
+	} else if (menu === 4) {
+		if (t2 >= t_pause2) { t += dt * 0.7; } else { t2 += dt2; t = 0; }
+	}
+}
+
+function animate() {
+	draw();
+	if (!paused) update();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function init() { t = 0; t2 = 0; t3 = 0; markButtons(); draw(); }
+
+function pulse1()  { menu = 1; init(); }
+function pulse2()  { menu = 2; init(); }
+function seigen()  { menu = 3; init(); }
+function shinkou() { menu = 4; init(); }
+
+function color1() { color = 1; init(); }
+function color2() { color = 2; init(); }
+function color3() { color = 3; init(); }
+function color4() { color = 4; init(); }
+
+/* ---------- 波長・振動数を変える ---------- */
+// 波長：原点での波の位相はそのままにして、波の形だけを変える
+function addRamda(d) {
+	const next = ramda + d;
+	if (next < RAMDA_MIN || next > RAMDA_MAX) return;
+	ramda = next;
+	V = ramda / tt;
+	draw();
+}
+
+// 振動数：周期 T を変える。t を同じ割合で伸縮させると
+// 波の形も波の先頭の位置も飛ばずに、速さだけが変わる
+function addFreq(d) {
+	const next = ttIndex + d;
+	if (next < 0 || next >= TT_LIST.length) return;
+	const ttOld = tt;
+	ttIndex = next;
+	tt = TT_LIST[ttIndex];
+	t = t * tt / ttOld;
+	V = ramda / tt;
+	draw();
+}
+
+function stop() { paused = !paused; }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	for (let n = 1; n <= 4; n++) {
+		document.getElementById("m" + n).classList.toggle("on", menu === n);
+		document.getElementById("c" + n).classList.toggle("on", color === n);
+	}
+}
+
+/* ---------- 描画速度（押している間ずっと変化） ---------- */
+let timerObject = null;
+const time = 50;
+
+function holdButton(id, delta) {
+	const el = document.getElementById(id);
+	const start = function (e) {
+		e.preventDefault();
+		clearInterval(timerObject);
+		timerObject = setInterval(function () {
+			dt += delta;
+			if (dt > 1.0) dt = 1.0;
+			if (dt < 0)   dt = 0;
+		}, time);
+	};
+	const end = function () { clearInterval(timerObject); };
+	el.addEventListener("pointerdown", start);
+	el.addEventListener("pointerup", end);
+	el.addEventListener("pointercancel", end);
+	el.addEventListener("pointerleave", end);
+}
+holdButton("up",   0.01 / 2);
+holdButton("down", -0.01 / 2);
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+markButtons();
+animate();
+</script>
+</body>
+</html>
