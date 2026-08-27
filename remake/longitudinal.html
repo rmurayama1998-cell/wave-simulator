@@ -99,10 +99,6 @@ button.on:hover { background: #4a4038; }
 		<button id="m2" onclick="setMenu(2)">定常波</button>
 		<button id="m3" onclick="setMenu(3)">変換のしくみ</button>
 	</span>
-	<span class="grp" id="colorGrp">
-		<button id="c1" onclick="setColor(1)">緑</button>
-		<button id="c2" onclick="setColor(2)">赤球・青球</button>
-	</span>
 </div>
 
 <div id="info2">
@@ -179,7 +175,6 @@ const CSTEP_MAX = 3 + CONV_N;   // ここまで進むと矢印の先を結ぶ
 let t = 0;
 let dt = 0.08;
 let menu = 1;                   // 1:進行波 2:定常波 3:変換のしくみ
-let color = 1;                  // 1:緑だけ 2:赤球・青球つき
 let paused = false;
 
 // 変換のしくみ用
@@ -264,27 +259,6 @@ function dot(vx, vy, diaPx) {
 	ctx.fillStyle = GREEN;
 	ctx.beginPath();
 	ctx.arc(vx * kx, vy * ky, diaPx / 2, 0, 2 * PI);
-	ctx.fill();
-}
-
-// 目印になる立体的な玉
-function sphere(vx, vy, diaPx, kind) {
-	const cx = vx * kx, cy = vy * ky, r = diaPx / 2;
-	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
-	if (kind === "red") {
-		g.addColorStop(0.00, "#fff2f0");
-		g.addColorStop(0.35, "#ff9d9b");
-		g.addColorStop(0.75, "#ff4a48");
-		g.addColorStop(1.00, "#d40000");
-	} else {
-		g.addColorStop(0.00, "#f0f0fd");
-		g.addColorStop(0.35, "#9d9dfc");
-		g.addColorStop(0.75, "#4a4afc");
-		g.addColorStop(1.00, "#0000d4");
-	}
-	ctx.fillStyle = g;
-	ctx.beginPath();
-	ctx.arc(cx, cy, r, 0, 2 * PI);
 	ctx.fill();
 }
 
@@ -379,33 +353,12 @@ function draw() {
 	if (menu === 3) { drawConv(); return; }
 	drawStage();
 
-	const dDot  = 20 * kx;          // 緑の粒の直径
-	const dBlue = 30 * kx;          // 青玉の直径
-	const dRed  = 27 * kx;          // 赤玉の直径
-
 	// 媒質の粒。上は変位を縦にとった点、下は実際にずれた位置の粒
+	const dDot = 20 * kx;
 	for (let i = -2 * dxs; i < VWv + 2 * dxs; i += dxs) {
 		const fy = disp(i);
 		dot(i,      TRANS_Y + fy, dDot);   // 横波表示：x はそのまま、y が変位
 		dot(i - fy, MED_Y,        dDot);   // 実際の縦波：x がずれる、y は一定
-	}
-
-	if (color !== 2) return;
-
-	// 目印の玉。定常波では青＝節、赤＝腹になる
-	const blueStep = (menu === 2) ? ramda / 2 : ramda;
-	const redFrom  = (menu === 2) ? x0 + ramda / 4 : x0 + ramda / 2;
-	const redStep  = (menu === 2) ? ramda / 2 : ramda;
-
-	for (let vx = x0; vx < VWv; vx += blueStep) {
-		const fy = disp(vx);
-		sphere(vx,      TRANS_Y + fy, dBlue, "blue");
-		sphere(vx - fy, MED_Y,        dBlue, "blue");
-	}
-	for (let vx = redFrom; vx < VWv; vx += redStep) {
-		const fy = disp(vx);
-		sphere(vx,      TRANS_Y + fy, dRed, "red");
-		sphere(vx - fy, MED_Y,        dRed, "red");
 	}
 }
 
@@ -574,7 +527,6 @@ function setMenu(n) {
 	markButtons();
 	draw();
 }
-function setColor(n) { color = n; markButtons(); draw(); }
 
 /* ---------- 変換のしくみの進め方 ---------- */
 function convReset() { cstep = 0; dispP = 0; rotIdx = 0; conn = 0; cauto = false; }
@@ -592,12 +544,8 @@ function markButtons() {
 	for (let n = 1; n <= 3; n++) {
 		document.getElementById("m" + n).classList.toggle("on", menu === n);
 	}
-	for (let n = 1; n <= 2; n++) {
-		document.getElementById("c" + n).classList.toggle("on", color === n);
-	}
 	// モードごとに、関係のあるボタンだけを出す
 	const conv = (menu === 3);
-	document.getElementById("colorGrp").style.display = conv ? "none" : "";
 	document.getElementById("speedGrp").style.display = conv ? "none" : "";
 	document.getElementById("stepGrp").style.display  = conv ? "" : "none";
 }
