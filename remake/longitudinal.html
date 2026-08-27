@@ -97,18 +97,25 @@ button.on:hover { background: #4a4038; }
 	<span class="grp">
 		<button id="m1" onclick="setMenu(1)">進行波</button>
 		<button id="m2" onclick="setMenu(2)">定常波</button>
+		<button id="m3" onclick="setMenu(3)">変換のしくみ</button>
 	</span>
-	<span class="grp">
+	<span class="grp" id="colorGrp">
 		<button id="c1" onclick="setColor(1)">緑</button>
 		<button id="c2" onclick="setColor(2)">赤球・青球</button>
 	</span>
 </div>
 
 <div id="info2">
-	<span class="grp">
+	<span class="grp" id="speedGrp">
 		<button onclick="stop()">停止／再開</button>
 		<button onclick="up()">描画速度↑</button>
 		<button onclick="down()">描画速度↓</button>
+	</span>
+	<span class="grp" id="stepGrp">
+		<button onclick="convReset()">最初から</button>
+		<button onclick="convBack()">もどす</button>
+		<button onclick="convNext()">1個すすめる</button>
+		<button onclick="convAll()">最後まで</button>
 	</span>
 	<button onclick="buttonBack()">戻る</button>
 </div>
@@ -154,12 +161,30 @@ const AXIS  = "#000000";        // 座標軸・文字
 const GRID  = "#999999";        // 目盛りの線
 const GREEN = "#00b800";        // 媒質の粒
 
+/* ---------- 変換のしくみ（授業用の固定設定） ---------- */
+const CONV_Y   = 360;           // 変換を見せる線の高さ（画面の中ほど）
+const CONV_X0  = 150;           // いちばん左の媒質の位置
+const CONV_LAM = 1000;          // 1波長ぶんを画面に収める
+const CONV_N   = 16;            // 媒質の数は CONV_N + 1 個
+const CONV_GAP = CONV_LAM / CONV_N;
+const CONV_A   = 60;            // 変位の最大（矢印の長さ）
+const C_RIGHT  = "#d94040";     // 右向きの変位
+const C_LEFT   = "#2a6fd0";     // 左向きの変位
+const CSTEP_MAX = 3 + CONV_N;   // ここまで進むと矢印の先を結ぶ
+
 /* ---------- 状態 ---------- */
 let t = 0;
 let dt = 0.08;
-let menu = 1;                   // 1:進行波 2:定常波
+let menu = 1;                   // 1:進行波 2:定常波 3:変換のしくみ
 let color = 1;                  // 1:緑だけ 2:赤球・青球つき
 let paused = false;
+
+// 変換のしくみ用
+let cstep = 0;                  // 0:等間隔 1:矢印 2〜:1個ずつ回転 最後:結ぶ
+let dispP = 0;                  // 媒質を実際の位置へ動かす進みぐあい（0〜1）
+let rotIdx = 0;                 // 何個目の矢印まで回し終えたか（小数）
+let conn = 0;                   // 先を結ぶ線の進みぐあい（0〜1）
+let cauto = false;              // 「最後まで」を押したか
 
 /* ============================================================
    画面サイズ
@@ -270,6 +295,35 @@ function title(str, vx, vy) {
 	ctx.restore();
 }
 
+// 矢じりつきの矢印（座標は実ピクセル）
+function arrowLine(x1, y1, x2, y2, col, widPx, alpha) {
+	const ddx = x2 - x1, ddy = y2 - y1;
+	const len = Math.hypot(ddx, ddy);
+	if (len < 1) return;
+	const ux = ddx / len, uy = ddy / len;
+	const head = Math.min(len, 15 * kx);
+	ctx.save();
+	ctx.globalAlpha = alpha;
+	ctx.strokeStyle = col;
+	ctx.fillStyle = col;
+	ctx.lineWidth = widPx;
+	ctx.lineCap = "round";
+	ctx.beginPath();
+	ctx.moveTo(x1, y1);
+	ctx.lineTo(x2 - ux * head * 0.75, y2 - uy * head * 0.75);
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.moveTo(x2, y2);
+	ctx.lineTo(x2 - ux * head + uy * head * 0.45, y2 - uy * head - ux * head * 0.45);
+	ctx.lineTo(x2 - ux * head - uy * head * 0.45, y2 - uy * head + ux * head * 0.45);
+	ctx.closePath();
+	ctx.fill();
+	ctx.restore();
+}
+
+const clamp01 = function (v) { return v < 0 ? 0 : (v > 1 ? 1 : v); };
+const ease = function (p) { return p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; };
+
 /* ============================================================
    媒質の変位
    正の値を「左向きの変位」とする。こうすると横波表示では
@@ -313,6 +367,7 @@ function drawStage() {
    本体の描画
    ============================================================ */
 function draw() {
+	if (menu === 3) { drawConv(); return; }
 	drawStage();
 
 	const dDot = 128 * 0.20 * kx;   // 緑の粒の直径
@@ -349,8 +404,141 @@ function draw() {
    見出しは玉より手前に描く
    ============================================================ */
 function drawTitles() {
+	if (menu === 3) return;
 	title("横波表示（変位を縦にとったもの）", x0 + 10, 118);
 	title("実際の縦波（媒質が左右に動く）",   x0 + 10, 398);
+}
+
+/* ============================================================
+   変換のしくみ
+   ① 媒質は等間隔 → ② 変位を横向きの矢印で表す
+   → ③ 矢印を1個ずつ 90° 回す → ④ 先を結ぶと横波表示になる
+   ============================================================ */
+// 位置 x0 における、右向きを正とした変位
+function convDisp(vx) {
+	return CONV_A * sin(2 * PI * (vx - CONV_X0) / CONV_LAM);
+}
+
+function convStepText() {
+	if (cstep === 0) return "① 媒質はもともと等間隔に並んでいる";
+	if (cstep === 1) return "② 変位を横向きの矢印で表す（右向き＝赤、左向き＝青）";
+	if (cstep < CSTEP_MAX) return "③ 矢印を 90° 回して縦向きにする（右→上、左→下）";
+	return "④ 矢印の先を結ぶと、横波表示のグラフになる";
+}
+
+function drawConv() {
+	// 背景
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	const right = CONV_X0 + CONV_LAM;
+
+	// λ/4 ごとの目盛りと、媒質が並ぶ線
+	for (let i = 0; i <= 4; i++) {
+		vSeg(CONV_X0 + CONV_LAM / 4 * i, CONV_Y - 150, CONV_Y + 150, 1, GRID);
+	}
+	hSeg(CONV_Y - CONV_A, CONV_X0, right, 1, GRID);
+	hSeg(CONV_Y + CONV_A, CONV_X0, right, 1, GRID);
+	hSeg(CONV_Y, CONV_X0 - 40, right + 40, 1.5, AXIS);
+
+	const dp = ease(dispP);
+	const midY = CONV_Y * ky;
+
+	for (let i = 0; i <= CONV_N; i++) {
+		const vx  = CONV_X0 + i * CONV_GAP;
+		const s   = convDisp(vx);                 // 右向きが正
+		const mag = Math.abs(s) * kx;             // 矢印の長さ（実ピクセル）
+		const col = (s >= 0) ? C_RIGHT : C_LEFT;
+		const bx  = vx * kx;                      // もとの位置
+		const px  = (vx + s * dp) * kx;           // いまの位置
+		const p   = ease(clamp01(rotIdx - i));    // この矢印の回転の進みぐあい
+		const turning = (rotIdx - i > 0) && (rotIdx - i < 1);
+
+		// もとの位置（等間隔）を表す輪
+		ctx.save();
+		ctx.strokeStyle = "#a99c8d";
+		ctx.lineWidth = 1.4 * kx;
+		ctx.beginPath();
+		ctx.arc(bx, midY, 5 * kx, 0, 2 * PI);
+		ctx.stroke();
+		ctx.restore();
+
+		if (dp > 0 && mag > 1) {
+			const a0 = (s >= 0) ? 0 : PI;             // 横向きのときの角度
+			const a1 = (s >= 0) ? -PI / 2 : PI / 2;   // 縦向きになったときの角度
+			const cur = mag * dp;
+
+			// もとの横向きの矢印を薄く残す
+			if (p > 0) arrowLine(bx, midY, bx + s * dp * kx, midY, col, 1.8 * kx, 0.22);
+
+			// 回している最中は 90° の軌跡を点線で見せる
+			if (turning) {
+				ctx.save();
+				ctx.strokeStyle = "rgba(60,50,40,0.40)";
+				ctx.lineWidth = 1 * kx;
+				ctx.setLineDash([4 * kx, 4 * kx]);
+				ctx.beginPath();
+				ctx.arc(bx, midY, cur, Math.min(a0, a1), Math.max(a0, a1));
+				ctx.stroke();
+				ctx.restore();
+			}
+
+			const ang = a0 + (a1 - a0) * p;
+			arrowLine(bx, midY, bx + cur * Math.cos(ang), midY + cur * Math.sin(ang),
+			          col, (turning ? 3.2 : 2.4) * kx, 1);
+		}
+
+		// 媒質そのもの
+		ctx.fillStyle = GREEN;
+		ctx.beginPath();
+		ctx.arc(px, midY, 8 * kx, 0, 2 * PI);
+		ctx.fill();
+	}
+
+	// ④ 矢印の先を結ぶ
+	if (conn > 0) {
+		ctx.save();
+		ctx.strokeStyle = GREEN;
+		ctx.lineWidth = 4 * kx;
+		ctx.lineJoin = "round";
+		ctx.lineCap = "round";
+		ctx.beginPath();
+		const last = CONV_X0 + CONV_LAM * conn;
+		for (let vx = CONV_X0; vx <= last; vx += 4) {
+			const y = (CONV_Y - convDisp(vx)) * ky;
+			if (vx === CONV_X0) ctx.moveTo(vx * kx, y); else ctx.lineTo(vx * kx, y);
+		}
+		ctx.stroke();
+		ctx.restore();
+	}
+
+	title(convStepText(), CONV_X0, CONV_Y - 200);
+}
+
+/* ---------- 変換のしくみ：時間を進める ---------- */
+function convUpdate() {
+	const f = 1 / 60;
+
+	const dTarget = (cstep >= 1) ? 1 : 0;
+	if (dispP !== dTarget) dispP = clamp01(dispP + Math.sign(dTarget - dispP) * f / 0.7);
+
+	const rTarget = Math.max(0, Math.min(CONV_N + 1, cstep - 1));
+	if (rotIdx < rTarget && dispP >= 1) {
+		// 変位が 0 の媒質は回すものが無いので、さっと飛ばす
+		const zero = Math.abs(convDisp(CONV_X0 + Math.floor(rotIdx) * CONV_GAP)) < 2;
+		rotIdx = Math.min(rTarget, rotIdx + f / (zero ? 0.08 : 0.45));
+	}
+	if (rotIdx > rTarget) rotIdx = Math.max(rTarget, rotIdx - f / 0.12);
+
+	const cTarget = (cstep >= CSTEP_MAX) ? 1 : 0;
+	if (conn !== cTarget) conn = clamp01(conn + Math.sign(cTarget - conn) * f / 1.0);
+
+	if (cauto) {
+		if (cstep < CSTEP_MAX && dispP >= 1 && rotIdx >= rTarget) cstep++;
+		if (cstep >= CSTEP_MAX) cauto = false;
+	}
 }
 
 /* ============================================================
@@ -359,15 +547,28 @@ function drawTitles() {
 function animate() {
 	draw();
 	drawTitles();
-	if (!paused) t += dt;
+	if (menu === 3) convUpdate();
+	else if (!paused) t += dt;
 	requestAnimationFrame(animate);
 }
 
 /* ============================================================
    ボタン
    ============================================================ */
-function setMenu(n) { menu = n; t = 0; markButtons(); draw(); }
+function setMenu(n) {
+	menu = n;
+	t = 0;
+	if (n === 3) convReset();
+	markButtons();
+	draw();
+}
 function setColor(n) { color = n; markButtons(); draw(); }
+
+/* ---------- 変換のしくみの進め方 ---------- */
+function convReset() { cstep = 0; dispP = 0; rotIdx = 0; conn = 0; cauto = false; }
+function convNext()  { if (cstep < CSTEP_MAX) cstep++; cauto = false; }
+function convBack()  { if (cstep > 0) cstep--; cauto = false; }
+function convAll()   { cauto = true; }
 
 function stop() { paused = !paused; }
 function up()   { dt += 0.02; if (dt > 0.40) dt = 0.40; }
@@ -376,10 +577,17 @@ function down() { dt -= 0.02; if (dt < 0)    dt = 0; }
 function buttonBack() { window.history.back(); }
 
 function markButtons() {
-	for (let n = 1; n <= 2; n++) {
+	for (let n = 1; n <= 3; n++) {
 		document.getElementById("m" + n).classList.toggle("on", menu === n);
+	}
+	for (let n = 1; n <= 2; n++) {
 		document.getElementById("c" + n).classList.toggle("on", color === n);
 	}
+	// モードごとに、関係のあるボタンだけを出す
+	const conv = (menu === 3);
+	document.getElementById("colorGrp").style.display = conv ? "none" : "";
+	document.getElementById("speedGrp").style.display = conv ? "none" : "";
+	document.getElementById("stepGrp").style.display  = conv ? "" : "none";
 }
 
 /* ---------- 画面をタップしたら全画面 ---------- */
