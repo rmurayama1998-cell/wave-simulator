@@ -99,6 +99,9 @@ button.on:hover { background: #4a4038; }
 		<button id="m2" onclick="setMenu(2)">定常波</button>
 		<button id="m3" onclick="setMenu(3)">変換のしくみ</button>
 	</span>
+	<span class="grp" id="arrowGrp">
+		<button id="ar" onclick="toggleArrows()">変位の矢印</button>
+	</span>
 </div>
 
 <div id="info2">
@@ -121,8 +124,8 @@ button.on:hover { background: #4a4038; }
 
 /* ============================================================
    縦波と横波表示
-   上：横波表示（媒質の変位を縦にとったグラフ）
-   下：実際の縦波（媒質そのものが左右に振動する）
+   上：実際の縦波（媒質そのものが左右に振動する）
+   下：横波表示（媒質の変位を縦にとったグラフ）
    仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
    ============================================================ */
 
@@ -143,8 +146,8 @@ let VWv = VW;                   // いま画面に入っている図の横幅（
 const PI = Math.PI, sin = Math.sin;
 
 /* ---------- 配置（仮想座標） ---------- */
-const TRANS_Y = 235;            // 上：横波表示の x 軸の高さ
-const MED_Y   = 490;            // 下：媒質が並ぶ線の高さ
+const MED_Y   = 235;            // 上：媒質が並ぶ線の高さ
+const TRANS_Y = 490;            // 下：横波表示の x 軸の高さ
 const UE      = 150;            // 縦線の上端
 const SHITA   = 560;            // 縦線の下端
 
@@ -176,6 +179,7 @@ let t = 0;
 let dt = 0.08;
 let menu = 1;                   // 1:進行波 2:定常波 3:変換のしくみ
 let paused = false;
+let showArrows = false;         // 変位を矢印で見せるか
 
 // 変換のしくみ用
 let cstep = 0;                  // 0:等間隔 1:矢印 2〜:1個ずつ回転 最後:結ぶ
@@ -353,12 +357,43 @@ function draw() {
 	if (menu === 3) { drawConv(); return; }
 	drawStage();
 
-	// 媒質の粒。上は変位を縦にとった点、下は実際にずれた位置の粒
 	const dDot = 20 * kx;
+
+	// 変位を矢印で見せる。もとの位置（輪）から、いまの位置へ向かう矢印
+	if (showArrows) {
+		for (let i = 0; i < VWv; i += dxs) {
+			const u   = -disp(i);                 // 右向きを正とした変位
+			const col = (u >= 0) ? C_RIGHT : C_LEFT;
+
+			// 上：媒質のもとの位置を輪で示す
+			ctx.save();
+			ctx.strokeStyle = "#a99c8d";
+			ctx.lineWidth = 1.4 * kx;
+			ctx.beginPath();
+			ctx.arc(i * kx, MED_Y * ky, 5 * kx, 0, 2 * PI);
+			ctx.stroke();
+			ctx.restore();
+
+			const len = Math.abs(u) * kx;
+			if (len > dDot / 2 + 3 * kx) {
+				const dir = (u >= 0) ? 1 : -1;
+				// 上：横向きの矢印（実際にどちらへどれだけ動いたか）
+				arrowLine(i * kx, MED_Y * ky,
+				          i * kx + u * kx - dir * dDot / 2, MED_Y * ky,
+				          col, 2.2 * kx, 1);
+				// 下：同じ変位を縦向きにしたもの（横波表示の値そのもの）
+				arrowLine(i * kx, TRANS_Y * ky,
+				          i * kx, (TRANS_Y - u) * ky + dir * dDot / 2,
+				          col, 2.2 * kx, 1);
+			}
+		}
+	}
+
+	// 媒質の粒。上は実際にずれた位置の粒、下は変位を縦にとった点
 	for (let i = -2 * dxs; i < VWv + 2 * dxs; i += dxs) {
 		const fy = disp(i);
-		dot(i,      TRANS_Y + fy, dDot);   // 横波表示：x はそのまま、y が変位
 		dot(i - fy, MED_Y,        dDot);   // 実際の縦波：x がずれる、y は一定
+		dot(i,      TRANS_Y + fy, dDot);   // 横波表示：x はそのまま、y が変位
 	}
 }
 
@@ -367,8 +402,8 @@ function draw() {
    ============================================================ */
 function drawTitles() {
 	if (menu === 3) return;
-	title("横波表示（変位を縦にとったもの）", x0 + 10, 118);
-	title("実際の縦波（媒質が左右に動く）",   x0 + 10, 398);
+	title("実際の縦波（媒質が左右に動く）",   x0 + 10, 118);
+	title("横波表示（変位を縦にとったもの）", x0 + 10, 398);
 }
 
 /* ============================================================
@@ -534,6 +569,8 @@ function convNext()  { if (cstep < CSTEP_MAX) cstep++; cauto = false; }
 function convBack()  { if (cstep > 0) cstep--; cauto = false; }
 function convAll()   { cauto = true; }
 
+function toggleArrows() { showArrows = !showArrows; markButtons(); draw(); }
+
 function stop() { paused = !paused; }
 function up()   { dt += 0.02; if (dt > 0.40) dt = 0.40; }
 function down() { dt -= 0.02; if (dt < 0)    dt = 0; }
@@ -546,6 +583,8 @@ function markButtons() {
 	}
 	// モードごとに、関係のあるボタンだけを出す
 	const conv = (menu === 3);
+	document.getElementById("ar").classList.toggle("on", showArrows);
+	document.getElementById("arrowGrp").style.display = conv ? "none" : "";
 	document.getElementById("speedGrp").style.display = conv ? "none" : "";
 	document.getElementById("stepGrp").style.display  = conv ? "" : "none";
 }

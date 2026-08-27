@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>波の反射（自由端・固定端）</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info, #info2 {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	color: #4a4038;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<span class="grp">
+		<button id="h1" onclick="setHansha(1)">自由端</button>
+		<button id="h2" onclick="setHansha(2)">固定端</button>
+	</span>
+	<span class="grp">
+		<button id="m1" onclick="setMenu(1)">パルス波</button>
+		<button id="m2" onclick="setMenu(2)">正弦波</button>
+		<button id="m3" onclick="setMenu(3)">正弦波･連続</button>
+		<button id="m4" onclick="setMenu(4)">定常波</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<div id="info2">
+	<span class="grp">
+		<button id="n4" onclick="setNami(4)">合成波</button>
+		<button id="n1" onclick="setNami(1)">入射波</button>
+		<button id="n2" onclick="setNami(2)">入射･反射波</button>
+		<button id="n3" onclick="setNami(3)">入射･反射･合成波</button>
+	</span>
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+	</span>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   波の反射（自由端・固定端）
+   右へ進む入射波（青）が右端で反射し、左へ戻る反射波（赤）と
+   重なって合成波（緑）をつくる。
+   反射波は「鏡像法」で描く。壁の向こうへそのまま進んだと考えた
+   入射波（うすい青）を、端で折り返したものが反射波になる。
+     自由端 … 折り返すだけ       （端は腹）
+     固定端 … 折り返して上下反転 （端は節）
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 図の基準の大きさ
+const MT = 50;                  // 上の余白：y 軸の矢印より上に空ける
+const MR = 80;                  // 右の余白：端の向こう側にも少し見せる
+const VWmin = 1200;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin;
+
+/* ---------- 配置（仮想座標） ---------- */
+const CY    = 324;              // 波の中心線（x 軸）の高さ
+const AMP   = 140;              // 入射波 1 本の振幅（合成波は最大その 2 倍）
+const UE    = 4;                // 縦線の上端
+const SHITA = 620;              // 縦線の下端
+const WMARGIN = 130;            // 端から画面右端までの幅
+
+/* ---------- 波のパラメータ ---------- */
+const ramda = 600;              // 波長 λ
+const tt    = 10;               // 周期 T
+const dxs   = 2;                // 球の間隔
+const dt0   = dxs * tt / ramda; // 1コマで dxs だけ波が進む時間
+const dtDef = dt0 * 2;          // ふだんの描画速度（1コマで dxs の2倍進む）
+const dtStep = dt0 / 4;         // 「描画↑↓」1回で変わる量
+const TRAIN = 2 * ramda;        // 「正弦波」で送り出す波列の長さ
+
+const BG    = "#faf4ee";        // 背景（生成り色）
+const AXIS  = "#000000";        // 座標軸
+const GRID  = "#999999";        // 目盛りの線
+const WALLC = "#4a4038";        // 端の棒・自由端のリング
+const GREEN = "#00b800";        // 合成波
+const BLUE  = "#0060d0";        // 入射波（右へ進む）
+const RED   = "#e00000";        // 反射波（左へ進む）
+
+/* ---------- 状態 ---------- */
+let t = 0;
+let dt = dtDef;
+let hansha = 1;                 // 1:自由端 2:固定端
+let menu = 1;                   // 1:パルス波 2:正弦波 3:正弦波･連続 4:定常波
+let nami = 4;                   // 1:入射波 2:入射･反射波 3:入射･反射･合成波 4:合成波
+let paused = false;
+let wait = 45;                  // 始まりと終わりの「ため」
+let wallX = 1236;               // 反射する端の位置
+let x0 = 36;                    // y 軸の位置
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+
+	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
+	// 縦と横で同じ倍率を使うので波の形（振幅と波長の比）も変わらない
+	let k = cv.height / (VH + MT);
+	k = Math.min(k, cv.width / (VWmin + MR));
+	kx = k;
+	ky = k;
+	// 横は、画面に入るぶんだけ x 軸を伸ばす
+	VWv = cv.width / k - MR;
+	offY = (cv.height - (VH + MT) * k) / 2;
+
+	// 端は画面の右のほうに置く。y 軸は端から λ/2 の整数倍だけ左に取るので、
+	// 目盛りの縦線が定常波の腹・節の位置とぴったりそろう
+	wallX = VWv - WMARGIN;
+	const m = Math.max(1, Math.floor((wallX - 20) / (ramda / 2)));
+	x0 = wallX - m * ramda / 2;
+
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+function vSeg(vx, vy1, vy2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx * kx, vy1 * ky);
+	ctx.lineTo(vx * kx, vy2 * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function hSeg(vy, vx1, vx2, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	ctx.beginPath();
+	ctx.moveTo(vx1 * kx, vy * ky);
+	ctx.lineTo(vx2 * kx, vy * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 矢印（up: 上向き / right: 右向き）
+function arrow(vx, vy, dir) {
+	const w = 128 * 0.15 * ky;
+	const h = 128 * 0.20 * ky;
+	const x = vx * kx, y = vy * ky;
+	ctx.fillStyle = AXIS;
+	ctx.beginPath();
+	if (dir === "up") {
+		ctx.moveTo(x, y - h / 2);
+		ctx.lineTo(x - w / 2, y + h / 2);
+		ctx.lineTo(x + w / 2, y + h / 2);
+	} else {
+		ctx.moveTo(x + h / 2, y);
+		ctx.lineTo(x - h / 2, y - w / 2);
+		ctx.lineTo(x - h / 2, y + w / 2);
+	}
+	ctx.closePath();
+	ctx.fill();
+}
+
+// 波を描く。点の並びを同じ太さの線でつなぐ（null で線が切れる）
+function drawWave(pts, thickPx, col, alpha) {
+	ctx.save();
+	ctx.globalAlpha = (alpha === undefined) ? 1 : alpha;
+	ctx.strokeStyle = col;
+	ctx.lineWidth = thickPx;
+	ctx.lineCap = "round";
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	let started = false;
+	for (const p of pts) {
+		if (p === null) { started = false; continue; }
+		const x = p[0] * kx, y = p[1] * ky;
+		if (!started) { ctx.moveTo(x, y); ctx.lineTo(x, y); started = true; }
+		else ctx.lineTo(x, y);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 節・腹の目印になる立体的な玉
+function sphere(vx, vy, diaPx, kind) {
+	const cx = vx * kx, cy = vy * ky, r = diaPx / 2;
+	const g = ctx.createRadialGradient(cx - r * 0.30, cy - r * 0.30, r * 0.05, cx, cy, r * 1.05);
+	if (kind === "red") {
+		g.addColorStop(0.00, "#fff2f0");
+		g.addColorStop(0.35, "#ff9d9b");
+		g.addColorStop(0.75, "#ff4a48");
+		g.addColorStop(1.00, "#d40000");
+	} else {
+		g.addColorStop(0.00, "#f0f0fd");
+		g.addColorStop(0.35, "#9d9dfc");
+		g.addColorStop(0.75, "#4a4afc");
+		g.addColorStop(1.00, "#0000d4");
+	}
+	ctx.fillStyle = g;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, 0, 2 * PI);
+	ctx.fill();
+}
+
+/* ============================================================
+   波の変位
+   ============================================================ */
+// 右へ進む正弦波そのもの（先頭のすぐ後ろが山になる向きに取る）
+function wf(xx) {
+	return AMP * sin(2 * PI * (t / tt - xx / ramda));
+}
+
+// 入射波。まだ波が届いていない所と、通り過ぎてしまった所は null。
+// 端の右側でも「そのまま進んだと考えた波」として値を返す（折り返しのもと）
+function dispIn(xx) {
+	if (menu === 4) return wf(xx);            // 定常波は最初からできあがっている
+	const front = ramda / tt * t;             // 波の先頭
+	const tail  = (menu === 1) ? front - ramda / 2
+	            : (menu === 2) ? front - TRAIN
+	            : -1e9;                       // 連続波は後ろがずっと続く
+	if (xx >= front || xx <= tail) return null;
+	return wf(xx);
+}
+
+// 反射波（鏡像法）。端をはさんだ向こう側の入射波を折り返したもの。
+// 自由端はそのまま、固定端は上下を反転する
+function dispRe(xx) {
+	const y = dispIn(2 * wallX - xx);
+	if (y === null) return null;
+	return (hansha === 1) ? y : -y;
+}
+
+// 合成波の変位（重ね合わせの原理：ふたつの変位の和）
+function dispSum(xx) {
+	return (dispIn(xx) || 0) + (dispRe(xx) || 0);
+}
+
+/* ============================================================
+   背景（目盛りと座標軸）
+   ============================================================ */
+function drawStage() {
+	// 背景は画面いっぱいに塗る
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+
+	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+
+	// λ/2 ごとの目盛りの縦線（端からきっちり λ/2 ずつ左へ）
+	for (let vx = wallX; vx >= 0; vx -= ramda / 2) {
+		vSeg(vx, UE, SHITA, 1, GRID);
+	}
+
+	// 振幅の目印（入射波1本分と、合成波の最大）
+	for (let i = -2; i <= 2; i++) {
+		if (i !== 0) hSeg(CY + AMP * i, 0, VWv, 1, GRID);
+	}
+
+	// x 軸 と y 軸
+	hSeg(CY, 0, VWv, 2, AXIS);
+	arrow(VWv - 10, CY, "right");
+	vSeg(x0, UE, SHITA, 2, AXIS);
+	arrow(x0, UE - 6, "up");
+}
+
+/* ============================================================
+   反射する端
+   ============================================================ */
+function drawWallZone() {
+	// 端の向こう＝波が実際には進めない場所。斜線で「ここは無い」ことを示す
+	const x1 = wallX * kx, x2 = (VWv + MR) * kx;
+	const y1 = UE * ky,    y2 = SHITA * ky;
+	ctx.save();
+	ctx.beginPath();
+	ctx.rect(x1, y1, x2 - x1, y2 - y1);
+	ctx.clip();
+	ctx.fillStyle = "rgba(120, 105, 90, 0.09)";
+	ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
+	ctx.strokeStyle = "rgba(120, 105, 90, 0.30)";
+	ctx.lineWidth = 1.2 * kx;
+	const step = 20 * kx, hgt = y2 - y1;
+	for (let x = x1 - hgt; x < x2; x += step) {
+		ctx.beginPath();
+		ctx.moveTo(x, y2);
+		ctx.lineTo(x + hgt, y1);
+		ctx.stroke();
+	}
+	ctx.restore();
+}
+
+function drawWallEnd() {
+	// 端そのもの（縦の棒）
+	vSeg(wallX, UE, SHITA, 7, WALLC);
+
+	const cx = wallX * kx;
+	if (hansha === 1) {
+		// 自由端：棒を上下に滑るリング。合成波の変位のぶんだけ動く
+		const cy = (CY - dispSum(wallX)) * ky;
+		ctx.save();
+		ctx.beginPath();
+		ctx.arc(cx, cy, 30 * kx, 0, 2 * PI);
+		ctx.fillStyle = BG;
+		ctx.fill();
+		ctx.lineWidth = 9 * kx;
+		ctx.strokeStyle = WALLC;
+		ctx.stroke();
+		ctx.restore();
+	} else {
+		// 固定端：端は棒に留められていて動かない
+		ctx.save();
+		ctx.beginPath();
+		ctx.arc(cx, CY * ky, 15 * kx, 0, 2 * PI);
+		ctx.fillStyle = WALLC;
+		ctx.fill();
+		ctx.restore();
+	}
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	drawStage();
+	drawWallZone();
+
+	const wSum = 80 * 0.30 * kx;       // 合成波の線の太さ
+	const wIn  = 80 * 0.20 * kx;       // 入射波・反射波の線の太さ（細い）
+	const dia  = 80 * 0.50 * kx;       // 節・腹の玉の直径
+
+	const ptsInL = [], ptsInR = [], ptsRe = [], ptsSum = [];
+	for (let xx = 0; xx <= VWv; xx += dxs) {
+		const yi = dispIn(xx);
+		const pt = (yi === null) ? null : [xx, CY - yi];
+		if (xx <= wallX) {
+			ptsInL.push(pt);
+			const yr = dispRe(xx);
+			ptsRe.push(yr === null ? null : [xx, CY - yr]);
+			ptsSum.push([xx, CY - ((yi || 0) + (yr || 0))]);
+		}
+		if (xx >= wallX) ptsInR.push(pt);
+	}
+
+	// 合成波（緑）は端の内側だけ。波が来ていない所は平ら
+	if (nami === 3 || nami === 4) drawWave(ptsSum, wSum, GREEN);
+
+	if (nami !== 4) {
+		// 端の向こうへ進んだと考えた入射波は、うすく描く（折り返しのもと）
+		drawWave(ptsInR, wIn, BLUE, 0.22);
+		drawWave(ptsInL, wIn, BLUE);
+	}
+	if (nami === 2 || nami === 3) drawWave(ptsRe, wIn, RED);
+
+	// 定常波：腹に赤玉、節に青玉を置く
+	if (menu === 4 && (nami === 3 || nami === 4)) {
+		// 自由端なら端が腹、固定端なら端が節。x0 は端から λ/2 の整数倍の位置
+		const anti = (hansha === 1) ? x0 : x0 + ramda / 4;
+		const node = (hansha === 1) ? x0 + ramda / 4 : x0;
+		for (let x = anti; x <= wallX + 1; x += ramda / 2) {
+			if (x >= 0) sphere(x, CY - dispSum(x), dia, "red");
+		}
+		for (let x = node; x <= wallX + 1; x += ramda / 2) {
+			if (x >= 0) sphere(x, CY, dia, "blue");
+		}
+	}
+
+	drawWallEnd();
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function update() {
+	if (wait > 0) { wait--; return; }
+
+	// 反射した波が左端から出ていったら、はじめから
+	const front = ramda / tt * t;
+	if (menu === 1 && front > 2 * wallX + ramda / 2 + 40) { t = 0; wait = 45; return; }
+	if (menu === 2 && front > 2 * wallX + TRAIN     + 40) { t = 0; wait = 45; return; }
+
+	t += dt;
+}
+
+function animate() {
+	draw();
+	if (!paused) update();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function init() { t = 0; dt = dtDef; wait = 45; markButtons(); draw(); }
+
+function setHansha(n) { hansha = n; init(); }
+function setMenu(n)   { menu = n; init(); }
+function setNami(n)   { nami = n; markButtons(); draw(); }
+
+function stop() { paused = !paused; }
+function up()   { dt += dtStep; if (dt > dt0 * 6) dt = dt0 * 6; }
+function down() { dt -= dtStep; if (dt < 0) dt = 0; }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	for (let n = 1; n <= 2; n++) {
+		document.getElementById("h" + n).classList.toggle("on", hansha === n);
+	}
+	for (let n = 1; n <= 4; n++) {
+		document.getElementById("m" + n).classList.toggle("on", menu === n);
+		document.getElementById("n" + n).classList.toggle("on", nami === n);
+	}
+}
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+init();
+animate();
+</script>
+</body>
+</html>
