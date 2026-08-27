@@ -134,9 +134,12 @@ const cv  = document.getElementById("myCanvas");
 const ctx = cv.getContext("2d");
 
 const VW = 1366, VH = 768;      // 図の基準の大きさ
-const MT = 50;                  // 上の余白
+// 図が実際に使っている縦の範囲。ここが画面いっぱいになるように拡大する
+const FIG_TOP = 95, FIG_BOT = 575;
+const FIG_USE  = 0.80;          // 画面の高さのうち図に使う割合（残りはボタン）
+const FIG_TOPM = 0.035;         // 図の上に空ける余白（画面の高さに対する割合）
 const MR = 80;                  // 右の余白：x 軸の矢印より右に空ける
-const VWmin = 1100;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+const VWmin = 850;              // 画面が細長いときでも、これだけの横幅は必ず見せる
 let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
 let offY = 0;                   // 図を上下の中央に置くためのずらし量
 let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
@@ -150,10 +153,10 @@ const UE      = 150;            // 縦線の上端
 const SHITA   = 560;            // 縦線の下端
 
 /* ---------- 波のパラメータ ---------- */
-const ramda = 800;              // 波長 λ
+const ramda = 600;              // 波長 λ
 const tt    = 8;                // 周期 T
 const AMP   = 60;               // 振幅（媒質が左右に動く幅）
-const dxs   = 40;               // 媒質の間隔
+const dxs   = 50;               // 媒質の間隔
 const x0    = 3 * dxs;          // 波の基準の位置（120）
 
 const BG    = "#faf4ee";        // 背景（生成り色）
@@ -162,12 +165,12 @@ const GRID  = "#999999";        // 目盛りの線
 const GREEN = "#00b800";        // 媒質の粒
 
 /* ---------- 変換のしくみ（授業用の固定設定） ---------- */
-const CONV_Y   = 360;           // 変換を見せる線の高さ（画面の中ほど）
-const CONV_X0  = 150;           // いちばん左の媒質の位置
-const CONV_LAM = 1000;          // 1波長ぶんを画面に収める
+const CONV_Y   = 355;           // 変換を見せる線の高さ（図の中ほど）
+const CONV_X0  = 90;            // いちばん左の媒質の位置
 const CONV_N   = 16;            // 媒質の数は CONV_N + 1 個
-const CONV_GAP = CONV_LAM / CONV_N;
-const CONV_A   = 60;            // 変位の最大（矢印の長さ）
+const CONV_A   = 75;            // 変位の最大（矢印の長さ）
+let CONV_LAM = 1000;            // 1波長ぶん。画面の横幅に合わせて決める
+let CONV_GAP = CONV_LAM / CONV_N;
 const C_RIGHT  = "#d94040";     // 右向きの変位
 const C_LEFT   = "#2a6fd0";     // 左向きの変位
 const CSTEP_MAX = 3 + CONV_N;   // ここまで進むと矢印の先を結ぶ
@@ -196,15 +199,21 @@ function resize() {
 	cv.width  = Math.round(w * dpr);
 	cv.height = Math.round(h * dpr);
 
-	// 倍率は「高さ」だけで決める。こうすると上下の余白がいつも同じ割合になり、
-	// 縦と横で同じ倍率を使うので波の形も変わらない
-	let k = cv.height / (VH + MT);
+	// 図が使っている縦の範囲が、画面の高さいっぱいになるように倍率を決める。
+	// 縦と横で同じ倍率を使うので、波の形（振幅と波長の比）は変わらない
+	let k = cv.height * FIG_USE / (FIG_BOT - FIG_TOP);
+	// ただし横が狭くなりすぎないように、最低限の横幅は確保する
 	k = Math.min(k, cv.width / (VWmin + MR));
 	kx = k;
 	ky = k;
 	// 横は、画面に入るぶんだけ軸を伸ばす
 	VWv = cv.width / k - MR;
-	offY = (cv.height - (VH + MT) * k) / 2;
+	// 図の上端が、画面の上から FIG_TOPM のところに来るように置く
+	offY = cv.height * FIG_TOPM - FIG_TOP * k;
+
+	// 変換のしくみは、そのときの横幅にちょうど 1 波長が収まるようにする
+	CONV_LAM = VWv - 2 * CONV_X0;
+	CONV_GAP = CONV_LAM / CONV_N;
 
 	draw();
 }
@@ -346,7 +355,7 @@ function drawStage() {
 	ctx.fillRect(0, 0, cv.width, cv.height);
 
 	// ここから先は、上下の中央ぞろえ＋上の余白のぶんだけ下げて描く
-	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+	ctx.setTransform(1, 0, 0, 1, 0, offY);
 
 	// λ/2 ごとの縦線。上下のグラフを貫いて、同じ位置どうしを結ぶ
 	for (let vx = x0; vx <= VWv; vx += ramda / 2) {
@@ -370,9 +379,9 @@ function draw() {
 	if (menu === 3) { drawConv(); return; }
 	drawStage();
 
-	const dDot = 128 * 0.20 * kx;   // 緑の粒の直径
-	const dBlue = 80 * 0.47 * kx;   // 青玉の直径
-	const dRed  = 80 * 0.40 * kx;   // 赤玉の直径
+	const dDot  = 20 * kx;          // 緑の粒の直径
+	const dBlue = 30 * kx;          // 青玉の直径
+	const dRed  = 27 * kx;          // 赤玉の直径
 
 	// 媒質の粒。上は変位を縦にとった点、下は実際にずれた位置の粒
 	for (let i = -2 * dxs; i < VWv + 2 * dxs; i += dxs) {
@@ -431,13 +440,13 @@ function drawConv() {
 	ctx.setTransform(1, 0, 0, 1, 0, 0);
 	ctx.fillStyle = BG;
 	ctx.fillRect(0, 0, cv.width, cv.height);
-	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+	ctx.setTransform(1, 0, 0, 1, 0, offY);
 
 	const right = CONV_X0 + CONV_LAM;
 
 	// λ/4 ごとの目盛りと、媒質が並ぶ線
 	for (let i = 0; i <= 4; i++) {
-		vSeg(CONV_X0 + CONV_LAM / 4 * i, CONV_Y - 150, CONV_Y + 150, 1, GRID);
+		vSeg(CONV_X0 + CONV_LAM / 4 * i, CONV_Y - 200, CONV_Y + 200, 1, GRID);
 	}
 	hSeg(CONV_Y - CONV_A, CONV_X0, right, 1, GRID);
 	hSeg(CONV_Y + CONV_A, CONV_X0, right, 1, GRID);
@@ -514,7 +523,7 @@ function drawConv() {
 		ctx.restore();
 	}
 
-	title(convStepText(), CONV_X0, CONV_Y - 200);
+	title(convStepText(), CONV_X0, CONV_Y - 215);
 }
 
 /* ---------- 変換のしくみ：時間を進める ---------- */
