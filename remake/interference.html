@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>波の干渉</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+	touch-action: none;
+}
+
+#info, #info2 {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	color: #4a4038;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+	align-items: center;
+}
+.lbl {
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	padding: 0 2px 0 8px;
+	white-space: nowrap;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<span class="grp">
+		<button id="md1" onclick="setMode(1)">経路差</button>
+		<button id="md2" onclick="setMode(2)">水面波</button>
+	</span>
+	<span class="grp">
+		<button id="p1" onclick="setPhase(1)">同位相</button>
+		<button id="p2" onclick="setPhase(-1)">逆位相</button>
+	</span>
+	<span class="grp" id="g1">
+		<span class="lbl">経路差</span>
+		<button id="c0" onclick="setGap(0)">0</button>
+		<button id="c1" onclick="setGap(0.5)">0.5λ</button>
+		<button id="c2" onclick="setGap(1)">λ</button>
+		<button id="c3" onclick="setGap(1.5)">1.5λ</button>
+		<button id="c4" onclick="setGap(2)">2λ</button>
+		<button id="c5" onclick="setGap(2.5)">2.5λ</button>
+	</span>
+	<span class="grp" id="g2">
+		<button id="v1" onclick="setView(1)">波面（作図）</button>
+		<button id="v2" onclick="setView(2)">リアルな水面</button>
+	</span>
+	<span class="grp" id="g5">
+		<span class="lbl">波源の距離</span>
+		<button onclick="addD(-1)">−</button>
+		<button onclick="addD(1)">＋</button>
+	</span>
+	<span class="grp" id="g6">
+		<span class="lbl">波長</span>
+		<button onclick="addL(-1)">−</button>
+		<button onclick="addL(1)">＋</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<div id="info2">
+	<span class="grp" id="g3">
+		<button id="tA" onclick="toggleA()">強め合う</button>
+		<button id="tN" onclick="toggleN()">弱め合う</button>
+	</span>
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+	</span>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   波の干渉
+     経路差モード … 波源 A・B から点 P までの道のりに沿って波を描く。
+                    変位は（道すじが斜めでも）いつも上下方向にとるので、
+                    P に届いた2つの波の高さをそのまま見くらべられる。
+     水面波モード … 同じことを水面全体で見た図。2つの見せ方を切り替えられる。
+       波面（作図） … 教科書と同じ、山＝実線・谷＝破線の同心円。
+                      円は広がるが、強め合う点・弱め合う点はその場から動かない。
+       リアルな水面 … 水面の傾きから光の当たり方を計算して陰影をつけた表示。
+                      斜めから光を当てた本物の水面のように見える。
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 図の基準の大きさ
+const MT = 16;                  // 上の余白
+const VWmin = 1200;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let kx = 1, ky = 1;             // 仮想 -> 実ピクセルの倍率（縦横とも同じ値）
+let offY = 0;                   // 図を上下の中央に置くためのずらし量
+let VWv = VW;                   // いま画面に入っている図の横幅（仮想単位）
+
+const PI = Math.PI, sin = Math.sin, cos = Math.cos;
+const hypot = Math.hypot, sqrt = Math.sqrt;
+
+/* ---------- 色 ---------- */
+const BG    = "#faf4ee";        // 背景（生成り色）
+const INK   = "#4a4038";        // 文字・目印
+const SUB   = "#8c8175";        // 添え書き
+const BLUE  = "#0060d0";        // 波源 A から来る波
+const RED   = "#e00000";        // 波源 B から来る波
+const GREEN = "#00a000";        // 2つを重ね合わせた結果
+const LINE_A = "#00791f";       // 強め合う（緑）
+const LINE_N = "#c2185b";       // 弱め合う（赤紫）
+// 水面らしい表示のときの文字色（暗い水面の上に置くので明るい色にする）
+const INK_R = "#eef3f7", SUB_R = "#b9c6d0";
+
+/* ---------- 共通の状態 ---------- */
+const tt = 10;                  // 周期 T
+const dt0 = 0.02;
+let t = 0;
+let dt = 0.08;
+let mode = 1;                   // 1:経路差 2:水面波
+let phase = 1;                  // 1:同位相 -1:逆位相
+let paused = false;
+
+/* ============================================================
+   経路差モード
+   ============================================================ */
+const SY = 530;                 // 波源を置く高さ
+const py = 200;                 // 点 P の高さ
+let AB = 1200;                  // 波源 A・B の間隔（画面の幅いっぱいに取る）
+let LAM = 200;                  // 波長（間隔の 1/6）
+let AMPW = 60;                  // 波1本の振幅
+let ax = 0, bx = 0;
+let px = 0;
+let preset = 0;                 // 選ばれている経路差
+
+/* ============================================================
+   水面波モード（共通）
+   ============================================================ */
+const FIELD_H = 620;
+const FY = 310;                 // 波源を置く高さ
+const RAT = [1, 1.5, 2, 2.5, 3];         // 波源の距離（波長の何倍か）
+let ri = 2;
+const LAMLIST = [120, 160, 200, 240, 280, 320];   // 波長の候補
+let li = 3;
+let WLAM = LAMLIST[li];          // 波長（変更可）
+let dd = RAT[ri] * WLAM;
+let s1x = 0, s2x = 0;
+let waterView = 2;                 // 1:波面（作図） 2:リアルな水面（既定）
+let showA = false, showN = false;  // 強め合う／弱め合う（作図では点、リアルでは重ねる線）既定は非表示
+
+function updateSources() {
+	dd = RAT[ri] * WLAM;
+	s1x = VWv / 2 - dd / 2;
+	s2x = VWv / 2 + dd / 2;
+}
+
+/* ---------- リアルな水面（陰影）表示のための格子 ---------- */
+const fld = document.createElement("canvas");
+const fctx = fld.getContext("2d");
+let FW = 0, FH = 0, fimg = null;
+let arrC = null, arrS = null, vGrid = null;
+let dirty = true;
+
+// 光の向き（左上から当てる）
+const LX = -0.55, LY = -0.35, LZ = 0.78;
+const LLEN = hypot(LX, LY, LZ);
+const lx = LX / LLEN, ly = LY / LLEN, lz = LZ / LLEN;
+const SLOPE = 5.5;      // 傾きの誇張ぐあい
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	if (!w || !h) return;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+
+	let k = cv.height / (VH + MT);
+	k = Math.min(k, cv.width / VWmin);
+	kx = k;
+	ky = k;
+	VWv = cv.width / k;
+	offY = (cv.height - (VH + MT) * k) / 2;
+
+	// 経路差モードの図は画面の幅いっぱいに広げる。
+	// 波長と振幅も間隔に合わせて決めるので、画面が変わっても図の形は同じ
+	AB = VWv - 140;
+	LAM = AB / 6;
+	AMPW = LAM * 0.30;
+	ax = VWv / 2 - AB / 2;
+	bx = VWv / 2 + AB / 2;
+	placeByGap(preset);
+
+	updateSources();
+
+	FW = Math.max(2, Math.round(VWv * kx / 3.4));
+	FH = Math.max(2, Math.round(FIELD_H * ky / 3.4));
+	fld.width = FW;
+	fld.height = FH;
+	fimg = fctx.createImageData(FW, FH);
+	arrC = new Float32Array(FW * FH);
+	arrS = new Float32Array(FW * FH);
+	vGrid = new Float32Array(FW * FH);
+	dirty = true;
+
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   描画のための小道具
+   ============================================================ */
+function label(txt, vx, vy, sizeV, col, align) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.font = "600 " + (sizeV * ky) + "px 'Hiragino Kaku Gothic ProN','Meiryo',system-ui,sans-serif";
+	ctx.textAlign = align || "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(txt, vx * kx, vy * ky);
+	ctx.restore();
+}
+
+function drawWave(pts, thickPx, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = thickPx;
+	ctx.lineCap = "round";
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	for (let i = 0; i < pts.length; i++) {
+		const x = pts[i][0] * kx, y = pts[i][1] * ky;
+		if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+function seg(x1, y1, x2, y2, wid, col, dash) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * kx;
+	if (dash) ctx.setLineDash([6 * kx, 5 * kx]);
+	ctx.beginPath();
+	ctx.moveTo(x1 * kx, y1 * ky);
+	ctx.lineTo(x2 * kx, y2 * ky);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function dot(x, y, r, fill, ring, ringW) {
+	ctx.save();
+	ctx.beginPath();
+	ctx.arc(x * kx, y * ky, r * kx, 0, 2 * PI);
+	if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+	if (ring) { ctx.lineWidth = (ringW || 3.5) * kx; ctx.strokeStyle = ring; ctx.stroke(); }
+	ctx.restore();
+}
+
+// 両端が矢じりの寸法線
+function dimLine(x1, y1, x2, y2, col) {
+	const dx = x2 - x1, dy = y2 - y1, L = hypot(dx, dy);
+	if (L < 1) return;
+	const ux = dx / L, uy = dy / L;
+	seg(x1, y1, x2, y2, 2, col);
+	ctx.save();
+	ctx.fillStyle = col;
+	const hw = 7, hl = 18;
+	for (const e of [[x1, y1, 1], [x2, y2, -1]]) {
+		const bxp = e[0] + ux * hl * e[2], byp = e[1] + uy * hl * e[2];
+		ctx.beginPath();
+		ctx.moveTo(e[0] * kx, e[1] * ky);
+		ctx.lineTo((bxp - uy * hw) * kx, (byp + ux * hw) * ky);
+		ctx.lineTo((bxp + uy * hw) * kx, (byp - ux * hw) * ky);
+		ctx.closePath();
+		ctx.fill();
+	}
+	ctx.restore();
+}
+
+/* ============================================================
+   経路差モード
+   ============================================================ */
+// 波源から点 P までの道のりに沿って波を描く。
+// 道すじが斜めでも、変位はいつも上下方向にとる。
+// こうすると P に届いた2つの波の高さがそのまま見くらべられる
+function pathWave(sx, sign, col) {
+	const dx = px - sx, dy = py - SY, L = hypot(dx, dy);
+	const ux = dx / L, uy = dy / L;
+	const pts = [];
+	for (let s = 0; s <= L; s += 2) {
+		const y = sign * AMPW * sin(2 * PI * (t / tt - s / LAM));
+		pts.push([sx + ux * s, SY + uy * s - y]);
+	}
+	drawWave(pts, 7 * kx, col);
+	return L;
+}
+
+// 道のりの長さを示す寸法線と「3.33 λ」の文字
+function pathDim(sx, L) {
+	const off = AMPW + 44;
+	dimLine(sx, SY + off, px, py + off, SUB);
+	label((L / LAM).toFixed(2) + " λ", (sx + px) / 2, (SY + py) / 2 + off + 46, 56, INK, "center");
+}
+
+// 点 P の目盛り。0・±A・±2A の位置に横線を引いておくと、
+// 合成がちょうど2倍なのか0なのかがすぐ読める
+function ruler() {
+	const top = py - 2 * AMPW, bot = py + 2 * AMPW;
+	seg(px, top - 14, px, bot + 14, 1.5, "rgba(74,64,56,0.30)");
+	for (const m of [-2, -1, 1, 2]) {
+		const w = (Math.abs(m) === 2) ? 26 : 16;
+		seg(px - w, py - m * AMPW, px + w, py - m * AMPW, 1.5, "rgba(74,64,56,0.30)");
+	}
+	seg(px - 34, py, px + 34, py, 2, "rgba(74,64,56,0.55)");
+}
+
+function drawGap() {
+	const rA = hypot(px - ax, py - SY);
+	const rB = hypot(px - bx, py - SY);
+
+	// 点 P に届いたときの、それぞれの波の高さ
+	const yA = AMPW * sin(2 * PI * (t / tt - rA / LAM));
+	const yB = phase * AMPW * sin(2 * PI * (t / tt - rB / LAM));
+
+	// 道すじ
+	seg(ax, SY, px, py, 2, INK);
+	seg(bx, SY, px, py, 2, INK);
+
+	// 寸法線
+	pathDim(ax, rA);
+	pathDim(bx, rB);
+
+	// 点 P の目盛り（波より先に引いて下敷きにする）
+	ruler();
+
+	// 波
+	pathWave(ax, 1, BLUE);
+	pathWave(bx, phase, RED);
+
+	// 波源。ここも上下に振動している（同位相なら2つは同じ動き）
+	const y0 = AMPW * sin(2 * PI * t / tt);
+	for (const e of [[ax, y0, "点A"], [bx, phase * y0, "点B"]]) {
+		seg(e[0], SY - AMPW, e[0], SY + AMPW, 1.5, "rgba(74,64,56,0.30)");
+		dot(e[0], SY - e[1], 14, RED, BG);
+		label(e[2], e[0], SY - AMPW - 34, 36, INK, "center");
+	}
+
+	// 点 P に届いた2つの波の高さ。青は輪、赤は塗りつぶしなので、
+	// ぴったり重なったときは「赤い点を青い輪が囲む」形になる
+	dot(px, py - yA, 16, null, BLUE, 5.5);
+	dot(px, py - yB, 10, RED, null);
+	// 重ね合わせた結果
+	dot(px, py - (yA + yB), 13, GREEN, BG, 3);
+
+	label("点P", px, py - 2 * AMPW - 46, 36, INK, "center");
+	label("合成", px + 46, py - 2 * AMPW - 4, 28, GREEN);
+
+	label(phase === 1 ? "同位相の波源" : "逆位相の波源", 18, 28, 27, SUB);
+}
+
+// 経路差を決めると点 P は双曲線の上にのる
+function placeByGap(g) {
+	const D = g * LAM, half = AB / 2, Y = py - SY;
+	if (D === 0 || D >= AB) { px = VWv / 2; return; }
+	const a = D / 2;
+	const b = sqrt(half * half - a * a);
+	px = VWv / 2 + a * sqrt(1 + (Y * Y) / (b * b));
+}
+
+/* ============================================================
+   水面波モード ① 波面（作図）
+   波源から出る波を、教科書の作図と同じように同心円で描く。
+     実線 … 山（クレスト）　　破線 … 谷
+   円は外へ広がっていくが、実線どうしが交わる点（強め合う点）は
+   その場から動かない
+   ============================================================ */
+const WFC1 = "rgba(0, 96, 208, 0.60)";   // 波源1の波面
+const WFC2 = "rgba(224, 0, 0, 0.55)";    // 波源2の波面
+
+function radii(shift) {
+	const cr = [], tr = [];
+	const rmax = hypot(VWv, FIELD_H) * 1.1;
+	for (let n = 0; n < 24; n++) {
+		const rc = (t / tt - n - shift) * WLAM;
+		if (rc > 1 && rc < rmax) cr.push(rc);
+		const rt = (t / tt - n - 0.5 - shift) * WLAM;
+		if (rt > 1 && rt < rmax) tr.push(rt);
+	}
+	return { crest: cr, trough: tr };
+}
+
+function circles(cx, list, col, dash) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = (dash ? 2 : 3.2) * kx;
+	if (dash) ctx.setLineDash([9 * kx, 8 * kx]);
+	for (const r of list) {
+		ctx.beginPath();
+		ctx.arc(cx * kx, FY * ky, r * kx, 0, 2 * PI);
+		ctx.stroke();
+	}
+	ctx.restore();
+}
+
+// 2つの円（波源1半径r1・波源2半径r2）の交点
+function meet(r1, r2) {
+	if (r1 + r2 < dd) return null;
+	if (Math.abs(r1 - r2) > dd) return null;
+	const a = (dd * dd + r1 * r1 - r2 * r2) / (2 * dd);
+	const h2 = r1 * r1 - a * a;
+	if (h2 <= 0) return null;
+	const h = sqrt(h2);
+	return [s1x + a, h];
+}
+
+// 山どうし・谷どうしが重なる所は強め合う。山と谷が重なる所は弱め合う
+function marks(l1, l2, kind) {
+	for (const r1 of l1) for (const r2 of l2) {
+		const m = meet(r1, r2);
+		if (!m) continue;
+		const x = m[0];
+		if (x < -20 || x > VWv + 20) continue;
+		for (const y of [FY - m[1], FY + m[1]]) {
+			if (y < -20 || y > FIELD_H + 20) continue;
+			if (kind === "a") dot(x, y, 8, LINE_A, BG, 2.5);
+			else dot(x, y, 8, BG, LINE_N, 3.5);
+		}
+	}
+}
+
+function drawWavefront() {
+	const A = radii(0);
+	const B = radii(phase === 1 ? 0 : 0.5);   // 逆位相の波源は半周期おくれて出す
+
+	circles(s1x, A.crest, WFC1, false);
+	circles(s1x, A.trough, WFC1, true);
+	circles(s2x, B.crest, WFC2, false);
+	circles(s2x, B.trough, WFC2, true);
+
+	if (showA) { marks(A.crest, B.crest, "a"); marks(A.trough, B.trough, "a"); }
+	if (showN) { marks(A.crest, B.trough, "n"); marks(A.trough, B.crest, "n"); }
+
+	dot(s1x, FY, 13, INK, BG, 3.5);
+	dot(s2x, FY, 13, INK, BG, 3.5);
+	label("S₁", s1x, FY - 34, 28, INK, "center");
+	label("S₂", s2x, FY - 34, 28, INK, "center");
+
+	label("実線＝山　破線＝谷　　● 強め合う点　○ 弱め合う点", 18, 26, 23, INK);
+	label("波源の距離 ＝ " + RAT[ri].toFixed(1) + " λ　" + (phase === 1 ? "同位相" : "逆位相"), 18, 58, 22, SUB);
+}
+
+/* ============================================================
+   水面波モード ② リアルな水面（陰影）
+   水面の高さそのものを色で塗るのではなく、水面の「傾き」から
+   光の当たり方を計算して陰影をつける
+   ============================================================ */
+function buildField() {
+	const k = 2 * PI / WLAM;
+	const cw = VWv / FW, ch = FIELD_H / FH;
+	let i = 0;
+	for (let jy = 0; jy < FH; jy++) {
+		const vy = (jy + 0.5) * ch, dy = vy - FY;
+		for (let jx = 0; jx < FW; jx++, i++) {
+			const vx = (jx + 0.5) * cw;
+			const a1 = k * hypot(vx - s1x, dy), a2 = k * hypot(vx - s2x, dy);
+			arrC[i] = cos(a1) + phase * cos(a2);
+			arrS[i] = sin(a1) + phase * sin(a2);
+		}
+	}
+	dirty = false;
+}
+
+function drawRealWater() {
+	if (dirty) buildField();
+	const th = 2 * PI * t / tt, st = sin(th), ct = cos(th);
+	const n = FW * FH;
+	for (let i = 0; i < n; i++) vGrid[i] = (st * arrC[i] - ct * arrS[i]) * 0.5;
+
+	const p8 = fimg.data;
+	for (let jy = 0; jy < FH; jy++) {
+		const y0 = jy * FW;
+		const yU = Math.max(0, jy - 1) * FW, yD = Math.min(FH - 1, jy + 1) * FW;
+		for (let jx = 0; jx < FW; jx++) {
+			const xL = Math.max(0, jx - 1), xR = Math.min(FW - 1, jx + 1);
+			const dvx = (vGrid[y0 + xR] - vGrid[y0 + xL]) * SLOPE;
+			const dvy = (vGrid[yD + jx] - vGrid[yU + jx]) * SLOPE;
+			let nx = -dvx, ny = -dvy, nz = 1;
+			const nl = hypot(nx, ny, nz);
+			nx /= nl; ny /= nl; nz /= nl;
+			const diff = Math.max(0, nx * lx + ny * ly + nz * lz);
+			const spec = Math.pow(diff, 22);
+			const bri = 0.22 + 0.62 * diff + 0.55 * spec;
+
+			const v = vGrid[y0 + jx];
+			const baseR = 26 + 46 * (v * 0.5 + 0.5);
+			const baseG = 74 + 96 * (v * 0.5 + 0.5);
+			const baseB = 118 + 108 * (v * 0.5 + 0.5);
+
+			const p = (y0 + jx) * 4;
+			p8[p]     = Math.min(255, baseR * bri);
+			p8[p + 1] = Math.min(255, baseG * bri);
+			p8[p + 2] = Math.min(255, baseB * bri);
+			p8[p + 3] = 255;
+		}
+	}
+	fctx.putImageData(fimg, 0, 0);
+
+	ctx.save();
+	ctx.fillStyle = "#10222f";
+	ctx.fillRect(0, 0, VWv * kx, FIELD_H * ky);
+	ctx.restore();
+	ctx.save();
+	ctx.imageSmoothingEnabled = true;
+	ctx.drawImage(fld, 0, 0, FW, FH, 0, 0, VWv * kx, FIELD_H * ky);
+	ctx.restore();
+
+	if (showA) drawHyper(true);
+	if (showN) drawHyper(false);
+
+	dot(s1x, FY, 13, "#10171e", INK_R, 3.5);
+	dot(s2x, FY, 13, "#10171e", INK_R, 3.5);
+	label("S₁", s1x, FY - 34, 28, INK_R, "center");
+	label("S₂", s2x, FY - 34, 28, INK_R, "center");
+
+	label("波源の距離 ＝ " + RAT[ri].toFixed(1) + " λ　" + (phase === 1 ? "同位相" : "逆位相"), 18, 26, 23, INK_R);
+	label("斜め上から光を当てた水面。動かない筋が節線", VWv - 16, 26, 21, SUB_R, "right");
+}
+
+// 強め合う・弱め合う所は双曲線に並ぶ（リアルな水面表示への重ね書き用）。
+// 水面は明るい所も暗い所もあるので、線の色だけでは背景に埋もれてしまう。
+// 濃い縁取りを先に描き、そのあと明るい色の芯を重ねる「ふちどり線」にして、
+// 水面の色に関係なく読めるようにしてある
+const HYPER_A = "#3cf17a";      // 強め合う（明るい黄緑）
+const HYPER_N = "#ff5fa8";      // 弱め合う（明るいピンク）
+
+function drawHyper(anti) {
+	const want = (anti === (phase === 1)) ? 0 : 0.5;
+	const col = anti ? HYPER_A : HYPER_N;
+	const dash = anti ? null : [11 * kx, 8 * kx];
+	const half = dd / 2;
+	const ymax = FIELD_H / 2, xmax = VWv / 2;
+
+	const paths = [];
+	for (let m = -12; m <= 12; m++) {
+		const c = (m + want) * WLAM;
+		if (Math.abs(c) >= dd) continue;
+		const a = c / 2;
+		const pts = [];
+		if (a === 0) {
+			pts.push([VWv / 2, 0], [VWv / 2, FIELD_H]);
+		} else {
+			const b = sqrt(half * half - a * a);
+			const aa = Math.abs(a), sg = (a > 0) ? 1 : -1;
+			let umax = Math.asinh(ymax / Math.max(b, 1e-6));
+			umax = Math.min(umax, Math.acosh(Math.max(xmax / aa, 1.0000001)));
+			const N = 120;
+			for (let i = 0; i <= N; i++) {
+				const u = -umax + 2 * umax * i / N;
+				pts.push([VWv / 2 + sg * aa * Math.cosh(u), FY + b * Math.sinh(u)]);
+			}
+		}
+		paths.push(pts);
+	}
+
+	function strokeAll(strokeCol, widPx) {
+		ctx.save();
+		ctx.strokeStyle = strokeCol;
+		ctx.lineWidth = widPx * kx;
+		ctx.lineJoin = "round";
+		ctx.lineCap = "round";
+		if (dash) ctx.setLineDash(dash);
+		for (const pts of paths) {
+			ctx.beginPath();
+			for (let i = 0; i < pts.length; i++) {
+				const x = pts[i][0] * kx, y = pts[i][1] * ky;
+				if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+			}
+			ctx.stroke();
+		}
+		ctx.restore();
+	}
+
+	strokeAll("rgba(6, 12, 18, 0.68)", anti ? 6.2 : 6.8);   // 縁取り
+	strokeAll(col, anti ? 3.0 : 3.2);                        // 芯
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
+	if (mode === 1) drawGap();
+	else if (waterView === 1) drawWavefront();
+	else drawRealWater();
+}
+
+function animate() {
+	draw();
+	if (!paused) t += dt;
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function setMode(n) {
+	mode = n;
+	document.getElementById("g1").style.display = (n === 1) ? "" : "none";
+	document.getElementById("g2").style.display = (n === 2) ? "" : "none";
+	document.getElementById("g3").style.display = (n === 2) ? "" : "none";
+	document.getElementById("g5").style.display = (n === 2) ? "" : "none";
+	document.getElementById("g6").style.display = (n === 2) ? "" : "none";
+	markButtons();
+}
+function setView(v)  { waterView = v; markButtons(); }
+function setPhase(p) { phase = p; dirty = true; markButtons(); }
+function setGap(g)   { preset = g; placeByGap(g); markButtons(); }
+function addD(s)     { ri = Math.min(RAT.length - 1, Math.max(0, ri + s)); updateSources(); dirty = true; }
+function addL(s)     { li = Math.min(LAMLIST.length - 1, Math.max(0, li + s)); WLAM = LAMLIST[li]; updateSources(); dirty = true; }
+function toggleA()   { showA = !showA; markButtons(); }
+function toggleN()   { showN = !showN; markButtons(); }
+
+function stop() { paused = !paused; }
+function up()   { dt += dt0; if (dt > 0.3) dt = 0.3; }
+function down() { dt -= dt0; if (dt < 0) dt = 0; }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	document.getElementById("md1").classList.toggle("on", mode === 1);
+	document.getElementById("md2").classList.toggle("on", mode === 2);
+	document.getElementById("p1").classList.toggle("on", phase === 1);
+	document.getElementById("p2").classList.toggle("on", phase === -1);
+	document.getElementById("v1").classList.toggle("on", waterView === 1);
+	document.getElementById("v2").classList.toggle("on", waterView === 2);
+	document.getElementById("tA").classList.toggle("on", showA);
+	document.getElementById("tN").classList.toggle("on", showN);
+	const gaps = [0, 0.5, 1, 1.5, 2, 2.5];
+	for (let i = 0; i < gaps.length; i++) {
+		document.getElementById("c" + i).classList.toggle("on", preset === gaps[i]);
+	}
+}
+
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+setGap(0);      // 経路差モードの点Pをあらかじめ置いておく（モードを切り替えたときのため）
+setMode(2);      // 最初に表示するのは水面波モード
+animate();
+</script>
+</body>
+</html>
