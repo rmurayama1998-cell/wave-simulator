@@ -569,13 +569,19 @@ function drawRealWater() {
 			const nl = hypot(nx, ny, nz);
 			nx /= nl; ny /= nl; nz /= nl;
 			const diff = Math.max(0, nx * lx + ny * ly + nz * lz);
-			const spec = Math.pow(diff, 22);
-			const bri = 0.22 + 0.62 * diff + 0.55 * spec;
+			// 光の反射（きらめき）は弱めにして飾り程度にとどめる。
+			// 強くしすぎると、光る場所が「傾き」で決まってしまい、
+			// 節・腹（＝高さの振れ幅）と関係なくきらめいて紛らわしくなる
+			const spec = Math.pow(diff, 10);
+			const bri = 0.55 + 0.30 * diff + 0.20 * spec;
 
+			// 見た目の明るさ・色あいは、傾きより「高さ」で決める比重を大きくする。
+			// これで、大きく揺れる場所（腹）は色の変化がはっきり出て、
+			// 動かない場所（節）ははっきり沈んだ色のままになる
 			const v = vGrid[y0 + jx];
-			const baseR = 26 + 46 * (v * 0.5 + 0.5);
-			const baseG = 74 + 96 * (v * 0.5 + 0.5);
-			const baseB = 118 + 108 * (v * 0.5 + 0.5);
+			const baseR = 18 + 74 * (v * 0.5 + 0.5);
+			const baseG = 58 + 150 * (v * 0.5 + 0.5);
+			const baseB = 104 + 150 * (v * 0.5 + 0.5);
 
 			const p = (y0 + jx) * 4;
 			p8[p]     = Math.min(255, baseR * bri);
@@ -669,6 +675,11 @@ function drawHyper(anti) {
    本体の描画
    ============================================================ */
 function draw() {
+	// ページを開いた直後など、まだ画面の大きさが決まっていない一瞬は
+	// 水面の格子(fimg)がまだ用意できていない。その場合は resize() をやり直す。
+	// resize() が成功すればその中で draw() が呼ばれるので、ここでは何もしない
+	if (!fimg) { resize(); return; }
+
 	ctx.setTransform(1, 0, 0, 1, 0, 0);
 	ctx.fillStyle = BG;
 	ctx.fillRect(0, 0, cv.width, cv.height);
@@ -679,9 +690,11 @@ function draw() {
 }
 
 function animate() {
+	// 次のコマの予約を先にしておく。draw() の中で何か問題が起きても
+	// アニメーションのループ自体は止まらないようにする
+	requestAnimationFrame(animate);
 	draw();
 	if (!paused) t += dt;
-	requestAnimationFrame(animate);
 }
 
 /* ============================================================
