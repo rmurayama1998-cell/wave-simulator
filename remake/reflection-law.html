@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>光の屈折（屈折の法則）</title>
+<title>波の反射（反射の法則）</title>
 <style>
 * {
 	-moz-user-select: none;
@@ -100,12 +100,8 @@ button.on:hover { background: #4a4038; }
 
 <div id="info">
 	<span class="grp">
-		<span class="lbl">上の媒質</span>
-		<button id="mo1" onclick="cycleMedium(1)">空気</button>
-	</span>
-	<span class="grp">
-		<span class="lbl">下の媒質</span>
-		<button id="mo2" onclick="cycleMedium(2)">水</button>
+		<button id="e1" onclick="setEnd(1)">自由端</button>
+		<button id="e2" onclick="setEnd(2)">固定端</button>
 	</span>
 	<span class="grp">
 		<span class="lbl">入射角</span>
@@ -132,11 +128,12 @@ button.on:hover { background: #4a4038; }
 "use strict";
 
 /* ============================================================
-   光の屈折（屈折の法則）
-     境界に斜めから入ってきた波面（帯）が、境界で速さが変わることで
-     折れ曲がる。折れ方は n₁ sinθ₁ = n₂ sinθ₂（スネルの法則）で決まる。
+   波の反射（反射の法則）
+     境界に斜めから入ってきた波面（帯）が、境界で反射して戻る。
+     入射角 ＝ 反射角。境界の速さは変わらないので波長も変わらない。
+     自由端では反射波の山がそのまま、固定端では半波長ずれる（位相反転）。
      「光線を表示」で中心の光線と角度、
-     「ホイヘンスの作図」で なぜ曲がるか（素元波の共通接線）を重ねられる。
+     「ホイヘンスの作図」で なぜ入射角＝反射角になるか（素元波の共通接線）。
    仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
    ============================================================ */
 
@@ -150,26 +147,17 @@ let kx = 1, ky = 1;
 let offY = 0;
 let VWv = VW;
 
-const PI = Math.PI, sin = Math.sin, cos = Math.cos, tan = Math.tan;
+const PI = Math.PI, sin = Math.sin, cos = Math.cos;
 const asin = Math.asin, sqrt = Math.sqrt, hypot = Math.hypot;
 const D2R = PI / 180;
 
 const INK   = "#4a4038";
 const SUB   = "#8c8175";
 const INCID = "#0060d0";
-const REFR  = "#00a000";
-const TIRC  = "#e00000";
+const REFL  = "#e07800";
 
-const MEDIA = [
-	{ name: "空気",   n: 1.00, tint: null },
-	{ name: "水",     n: 1.33, tint: "rgba(70, 150, 220, 0.16)" },
-	{ name: "ガラス", n: 1.50, tint: "rgba(90, 170, 140, 0.18)" },
-	{ name: "油",     n: 1.20, tint: "rgba(210, 170, 60, 0.16)" }
-];
-let mi1 = 0;
-let mi2 = 1;
-
-let angleDeg = 40;
+let endType = 1;        // 1:自由端 2:固定端
+let angleDeg = 45;
 let showRay = false;
 let showHuy = false;
 let showValues = true;
@@ -180,8 +168,8 @@ let dt = 0.06;
 
 const OY = 384;
 const FIELD_TOP = 44, FIELD_BOT = 726;
-const LAM0 = 96;         // 上の媒質での波面の間隔（見た目）
-const BW = 300;          // 帯の幅（波面に沿った長さ）
+const LAM0 = 96;
+const BW = 300;
 function OX() { return VWv / 2; }
 
 /* ============================================================ */
@@ -202,22 +190,9 @@ function resize() {
 window.addEventListener("resize", resize);
 window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
 
-/* ---------- 物理 ---------- */
-function n1() { return MEDIA[mi1].n; }
-function n2() { return MEDIA[mi2].n; }
 function theta1() { return angleDeg * D2R; }
-function theta2() {
-	const s2 = n1() / n2() * sin(theta1());
-	if (s2 > 1) return null;
-	return asin(s2);
-}
-function isTIR() { return theta2() === null; }
-function criticalAngle() {
-	if (n1() <= n2()) return null;
-	return asin(n2() / n1()) / D2R;
-}
 
-/* ---------- 描画の小道具 ---------- */
+/* ---------- 小道具 ---------- */
 function label(txt, vx, vy, sizeV, col, align) {
 	ctx.save();
 	ctx.fillStyle = col;
@@ -274,13 +249,9 @@ function angleArc(cx, cy, a0, a1, r, col, txt, txtR) {
 		label(txt, cx + Math.cos(m) * txtR, cy + Math.sin(m) * txtR, 23, col, "center");
 	}
 }
-
-/* y=OY を境に線分を切る（"above": y<=OY 側だけ / "below": y>=OY 側だけ、
-   境界を跨ぐときは交点でスナップ） */
-function clipSeg(x1, y1, x2, y2, side, wid, col) {
-	const a = side === "above";
-	const in1 = a ? (y1 <= OY) : (y1 >= OY);
-	const in2 = a ? (y2 <= OY) : (y2 >= OY);
+// y=OY より上（y<=OY）の部分だけ描く
+function clipAbove(x1, y1, x2, y2, wid, col) {
+	const in1 = y1 <= OY, in2 = y2 <= OY;
 	if (in1 && in2) { seg(x1, y1, x2, y2, wid, col); return; }
 	if (!in1 && !in2) return;
 	const f = (OY - y1) / (y2 - y1);
@@ -290,7 +261,7 @@ function clipSeg(x1, y1, x2, y2, side, wid, col) {
 }
 
 /* ============================================================
-   背景（媒質の色分け・境界・法線）
+   背景（境界＝反射面）
    ============================================================ */
 function drawStage() {
 	ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -298,53 +269,49 @@ function drawStage() {
 	ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
 
-	const m1 = MEDIA[mi1], m2 = MEDIA[mi2];
-	if (m1.tint) { ctx.save(); ctx.fillStyle = m1.tint; ctx.fillRect(0, FIELD_TOP * ky, VWv * kx, (OY - FIELD_TOP) * ky); ctx.restore(); }
-	if (m2.tint) { ctx.save(); ctx.fillStyle = m2.tint; ctx.fillRect(0, OY * ky, VWv * kx, (FIELD_BOT - OY) * ky); ctx.restore(); }
+	// 境界の下（反射面の向こう）を薄く塗る
+	ctx.save();
+	ctx.fillStyle = "rgba(74, 64, 56, 0.08)";
+	ctx.fillRect(0, OY * ky, VWv * kx, (FIELD_BOT - OY) * ky);
+	ctx.restore();
+	// 反射面のハッチング
+	ctx.save();
+	ctx.strokeStyle = "rgba(74, 64, 56, 0.30)";
+	ctx.lineWidth = 1.4 * kx;
+	for (let x = 0; x < VWv + 40; x += 26) {
+		seg(x, OY, x - 20, OY + 20, 1.4, "rgba(74,64,56,0.28)");
+	}
+	ctx.restore();
 
 	seg(0, OY, VWv, OY, 3, INK);
-	seg(OX(), FIELD_TOP, OX(), FIELD_BOT, 1.6, "rgba(74,64,56,0.35)", [8, 6]);
+	seg(OX(), FIELD_TOP, OX(), OY, 1.6, "rgba(74,64,56,0.35)", [8, 6]);
 	label("法線", OX() + 10, FIELD_TOP + 12, 18, SUB);
-	label(m1.name + "（n = " + m1.n.toFixed(2) + "）", 18, FIELD_TOP + 20, 22, INK);
-	label(m2.name + "（n = " + m2.n.toFixed(2) + "）", 18, FIELD_BOT - 16, 22, INK);
+	label(endType === 1 ? "自由端（位相そのまま）" : "固定端（位相が反転）", 18, FIELD_BOT - 16, 22, INK);
 }
 
 /* ============================================================
-   波面（帯）：入射 → 屈折
+   波面（帯）：入射 → 反射
    ============================================================ */
 function drawWaves() {
-	const th1 = theta1(), th2 = theta2();
+	const th1 = theta1();
 	const s1 = sin(th1), c1 = cos(th1);
 	const ox = OX(), oy = OY;
-	const A = (t * 46) % LAM0;                 // 帯が進んだ量（0..LAM0 でループ）
+	const A = (t * 46) % LAM0;
+	const phi = (endType === 2) ? LAM0 / 2 : 0;   // 固定端は半波長ずらす
 
-	// 上の媒質：入射波面。中心 P_k は入射方向 d1 上、波面は d1 に垂直
+	// 入射波面：中心 P_k は入射方向 d1=(s1,c1) 上
 	for (let k = -8; k <= 14; k++) {
-		const off = A - k * LAM0;                // O からの符号つき距離（d1方向が＋）
+		const off = A - k * LAM0;
 		const pcx = ox + off * s1, pcy = oy + off * c1;
 		const ex = c1 * BW, ey = -s1 * BW;
-		clipSeg(pcx - ex, pcy - ey, pcx + ex, pcy + ey, "above", 3.6, INCID);
+		clipAbove(pcx - ex, pcy - ey, pcx + ex, pcy + ey, 3.6, INCID);
 	}
-
-	if (!isTIR()) {
-		const s2 = sin(th2), c2 = cos(th2);
-		const ratio = n1() / n2();               // λ2/λ1 = v2/v1
-		const BW2 = BW * (c2 / c1);
-		for (let k = -8; k <= 14; k++) {
-			const off = (A - k * LAM0) * ratio;   // 下の媒質では詰まる
-			const qcx = ox + off * s2, qcy = oy + off * c2;
-			const ex = c2 * BW2, ey = -s2 * BW2;
-			clipSeg(qcx - ex, qcy - ey, qcx + ex, qcy + ey, "below", 3.6, REFR);
-		}
-	} else {
-		// 全反射：下には波が出ていかない。境界で跳ね返る帯をうっすら描く
-		const s1r = s1, c1r = -c1;
-		for (let k = -8; k <= 14; k++) {
-			const off = A - k * LAM0;
-			const rcx = ox + off * s1r, rcy = oy + off * c1r;
-			const ex = c1 * BW, ey = s1 * BW;
-			clipSeg(rcx - ex, rcy - ey, rcx + ex, rcy + ey, "above", 3.4, TIRC);
-		}
+	// 反射波面：中心は反射方向 d1'=(s1,-c1) 上、波面は (c1,s1) 方向
+	for (let k = -8; k <= 14; k++) {
+		const off = A - k * LAM0 - phi;
+		const rcx = ox + off * s1, rcy = oy - off * c1;
+		const ex = c1 * BW, ey = s1 * BW;
+		clipAbove(rcx - ex, rcy - ey, rcx + ex, rcy + ey, 3.6, REFL);
 	}
 }
 
@@ -352,37 +319,29 @@ function drawWaves() {
    光線（中心の進行方向）＋ 角度
    ============================================================ */
 function drawRayOverlay() {
-	const th1 = theta1(), th2 = theta2();
+	const th1 = theta1();
 	const ox = OX(), oy = OY, L = 260;
 	const dIx = sin(th1), dIy = cos(th1);
 	seg(ox - dIx * L, oy - dIy * L, ox, oy, 5, INK);
 	arrowAt(ox, oy, dIx, dIy, 15, INK);
-	if (!isTIR()) {
-		const dTx = sin(th2), dTy = cos(th2);
-		seg(ox, oy, ox + dTx * L, oy + dTy * L, 5, INK);
-		arrowAt(ox + dTx * L, oy + dTy * L, dTx, dTy, 15, INK);
-	} else {
-		const dRx = sin(th1), dRy = -cos(th1);
-		seg(ox, oy, ox + dRx * L, oy + dRy * L, 6, TIRC);
-		arrowAt(ox + dRx * L, oy + dRy * L, dRx, dRy, 15, TIRC);
-	}
+	const dRx = sin(th1), dRy = -cos(th1);
+	seg(ox, oy, ox + dRx * L, oy + dRy * L, 5, INK);
+	arrowAt(ox + dRx * L, oy + dRy * L, dRx, dRy, 15, INK);
 	dot(ox, oy, 5, INK);
 	if (showValues) {
 		angleArc(ox, oy, -PI / 2, -PI / 2 + th1, 66, INCID, th1 > 0.03 ? angleDeg.toFixed(0) + "°" : "", 96);
-		if (!isTIR()) angleArc(ox, oy, PI / 2, PI / 2 - th2, 66, REFR, th2 > 0.03 ? (th2 / D2R).toFixed(1) + "°" : "", 96);
+		angleArc(ox, oy, -PI / 2, -PI / 2 - th1, 88, REFL, th1 > 0.03 ? angleDeg.toFixed(0) + "°" : "", 118);
 	}
 }
 
 /* ============================================================
-   ホイヘンスの作図（なぜ曲がるか）
+   ホイヘンスの作図（なぜ入射角＝反射角か）
    ============================================================ */
 function drawHuygens() {
 	const th1 = theta1();
-	const blocked = isTIR();
-	const ratio = n1() / n2();           // v_out / v1
 	const oy = OY;
 	const s1 = sin(th1), c1 = cos(th1);
-	const xA = VWv * 0.28;               // 作図の起点 A（画面左寄りに固定）
+	const xA = VWv * 0.28;
 	const v1s = 44;
 	const period = 5.4;
 	const tau = (t % period) / period;
@@ -391,53 +350,51 @@ function drawHuygens() {
 	const Tnow = Math.max(0.0001, tau * Tmax);
 	const Xnow = xA + v1s * Tnow / s1;
 
-	// いま境界に届いている入射波面：点B(Xnow)から上へ（波面は d1 に垂直）。
-	// 少し後ろにも平行な波面を並べて「波の列」に見せる
+	// 入射波面：点B(Xnow)から上へ
 	for (let m = 0; m <= 2; m++) {
 		const bx = Xnow + m * (LAM0 / s1);
 		const w = 210 - m * 34;
-		clipSeg(bx, oy, bx + c1 * w, oy - s1 * w, "above", m === 0 ? 3.6 : 2.4,
+		clipAbove(bx, oy, bx + c1 * w, oy - s1 * w, m === 0 ? 3.6 : 2.4,
 			m === 0 ? INCID : "rgba(0,96,208,0.4)");
 	}
 
-	// 素元波（半円）
+	// 素元波（半円）：同じ媒質なので入射と同じ速さ v1s で、境界の上へ広がる
 	for (let i = 0; i <= 7; i++) {
 		const X = xA + (Xnow - xA) * i / 7;
 		const age = Tnow - (X - xA) * s1 / v1s;
 		if (age <= 0.0001) { if (i > 0) dot(X, oy, 4, "rgba(74,64,56,0.35)"); continue; }
-		const r = v1s * ratio * age;
+		const r = v1s * age;
 		if (r <= 0.5) continue;
 		ctx.save();
-		ctx.strokeStyle = blocked ? TIRC : REFR;
+		ctx.strokeStyle = REFL;
 		ctx.globalAlpha = 0.85;
 		ctx.lineWidth = 1.8 * kx;
 		ctx.beginPath();
-		ctx.arc(X * kx, oy * ky, r * kx, 0, PI, false);
+		ctx.arc(X * kx, oy * ky, r * kx, PI, 2 * PI, false);   // 上半分
 		ctx.stroke();
 		ctx.restore();
 		dot(X, oy, 3.2, INK);
 	}
 
-	// 共通接線＝新しい波面
-	const r0 = v1s * ratio * Tnow;
+	// 共通接線＝反射波面。速さが同じなので r0 / AB = sinθ1 → 反射角 ＝ 入射角
+	const r0 = v1s * Tnow;
 	const AB = Xnow - xA;
-	if (r0 > 0.5 && AB > 0.5 && !blocked) {
-		const ang = asin(Math.min(1, r0 / AB));   // 境界となす角 = θ₂
-		const dx = -cos(ang), dy = sin(ang);
-		let len = 460;
-		if (oy + dy * len > FIELD_BOT) len = (FIELD_BOT - oy) / dy;   // 下端で止める
+	if (r0 > 0.5 && AB > 0.5) {
+		const ang = asin(Math.min(1, r0 / AB));
+		const dx = -cos(ang), dy = -sin(ang);
+		let len = 380;
+		if (oy + dy * len < FIELD_TOP) len = (FIELD_TOP - oy) / dy;   // 上端で止める
 		seg(Xnow, oy, Xnow + dx * len, oy + dy * len, 4.5, INK);
-		label("新しい波面（屈折波）", Xnow + dx * (len * 0.66), oy + dy * (len * 0.66) + 22, 21, INK, "center");
+		label("新しい波面（反射波）", Xnow + dx * (len * 0.7), oy + dy * (len * 0.7) - 20, 21, INK, "center");
 	}
 	dot(Xnow, oy, 6, INK, "#faf4ee", 2.5);
-	label("B（いま届いた点）", Xnow + 12, oy - 18, 18, SUB);
+	label("B（いま届いた点）", Xnow + 12, oy + 22, 18, SUB);
 	dot(xA, oy, 6, INK, "#faf4ee", 2.5);
-	label("A（先に届いた点）", xA - 12, oy - 18, 18, SUB, "right");
+	label("A（先に届いた点）", xA - 12, oy + 22, 18, SUB, "right");
 
-	if (blocked) label("屈折側は素元波が広がりすぎて、そろう接線ができない → 全反射", 18, FIELD_BOT - 44, 22, TIRC);
 	if (showValues) {
-		label("素元波は違う速さで広がる → 半径の比が変わり、", 18, oy + 250, 20, INK);
-		label("接線（新しい波面）の傾きが変わる ＝ n₁ sinθ₁ = n₂ sinθ₂", 18, oy + 276, 22, REFR);
+		label("素元波は入射と同じ速さで広がる → 半径の並びが対称", 18, oy + 250, 20, INK);
+		label("→ 接線（反射波面）も対称 ＝ 反射角 ＝ 入射角", 18, oy + 276, 22, REFL);
 	}
 }
 
@@ -446,8 +403,7 @@ function drawHuygens() {
    ============================================================ */
 function drawReadout() {
 	if (!showValues) return;
-	const tir = isTIR();
-	const bw = 452, bh = tir ? 174 : 210, bx0 = VWv - bw - 16, by0 = FIELD_TOP;
+	const bw = 430, bh = 160, bx0 = VWv - bw - 16, by0 = FIELD_TOP;
 	ctx.save();
 	ctx.fillStyle = "rgba(255, 253, 250, 0.94)";
 	ctx.strokeStyle = "rgba(74, 64, 56, 0.30)";
@@ -456,19 +412,12 @@ function drawReadout() {
 	ctx.roundRect(bx0 * kx, by0 * ky, bw * kx, bh * ky, 12 * kx);
 	ctx.fill(); ctx.stroke();
 	ctx.restore();
-	let y = by0 + 32;
-	label("入射角 θ₁ = " + angleDeg.toFixed(0) + "°", bx0 + 20, y, 25, INCID); y += 38;
-	label("n₁ sinθ₁ = n₂ sinθ₂", bx0 + 20, y, 24, INK); y += 32;
-	const lhs = n1() * sin(theta1());
-	label(n1().toFixed(2) + " × sin" + angleDeg.toFixed(0) + "° = " + n2().toFixed(2) + " × sinθ₂", bx0 + 20, y, 21, SUB); y += 30;
-	label(lhs.toFixed(3) + " = " + n2().toFixed(2) + " × sinθ₂", bx0 + 20, y, 21, SUB); y += 34;
-	if (tir) {
-		label("→ sinθ₂ が 1 を超える → 屈折できない（全反射）", bx0 + 20, y, 23, TIRC);
-	} else {
-		label("→ 屈折角 θ₂ = " + (theta2() / D2R).toFixed(1) + "°", bx0 + 20, y, 26, REFR);
-	}
-	const tc = criticalAngle();
-	if (tc !== null) label("臨界角 ≒ " + tc.toFixed(1) + "°（超えると全反射）", bx0 + 20, by0 + bh - 14, 18, SUB);
+	let y = by0 + 34;
+	label("入射角 θ₁ = " + angleDeg.toFixed(0) + "°", bx0 + 20, y, 25, INCID); y += 40;
+	label("反射角 = " + angleDeg.toFixed(0) + "°", bx0 + 20, y, 25, REFL); y += 34;
+	label("いつも 入射角 ＝ 反射角", bx0 + 20, y, 22, INK); y += 32;
+	label(endType === 1 ? "自由端：反射波は位相そのまま" : "固定端：反射波は半波長ずれる（位相反転）",
+		bx0 + 20, y, 19, SUB);
 }
 
 /* ============================================================ */
@@ -490,11 +439,7 @@ function animate() {
 }
 
 /* ---------- ボタン ---------- */
-function cycleMedium(which) {
-	if (which === 1) mi1 = (mi1 + 1) % MEDIA.length;
-	else mi2 = (mi2 + 1) % MEDIA.length;
-	markButtons();
-}
+function setEnd(n) { endType = n; markButtons(); }
 function addAngle(d) { angleDeg = Math.max(5, Math.min(80, angleDeg + d)); }
 function toggleRay() { showRay = !showRay; markButtons(); }
 function toggleHuygens() { showHuy = !showHuy; markButtons(); }
@@ -505,8 +450,8 @@ function down() { dt -= dt0; if (dt < 0.01) dt = 0.01; }
 function buttonBack() { window.history.back(); }
 
 function markButtons() {
-	document.getElementById("mo1").textContent = MEDIA[mi1].name;
-	document.getElementById("mo2").textContent = MEDIA[mi2].name;
+	document.getElementById("e1").classList.toggle("on", endType === 1);
+	document.getElementById("e2").classList.toggle("on", endType === 2);
 	document.getElementById("tray").classList.toggle("on", showRay);
 	document.getElementById("thuy").classList.toggle("on", showHuy);
 	document.getElementById("tval").classList.toggle("on", showValues);
