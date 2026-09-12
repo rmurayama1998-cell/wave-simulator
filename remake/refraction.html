@@ -1,291 +1,588 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-	<meta charset="utf-8">
-	<title>光の屈折（屈折の法則）</title>
-	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-	<meta name="apple-mobile-web-app-capable" content="yes">
-	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>波の屈折（屈折の法則）</title>
 <style>
 * {
 	-moz-user-select: none;
 	-ms-user-select: none;
-	-khtml-user-select: none;
 	-webkit-user-select: none;
-	-webkit-touch-callout: none;
+	user-select: none;
+	-webkit-appearance: none;
 }
 html, body {
 	margin: 0;
 	padding: 0;
 	overflow: hidden;
-	background-color: #003d3d;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+	font-family: "Hiragino Kaku Gothic ProN", "Meiryo", system-ui, sans-serif;
 }
 button, html, body, li { touch-action: manipulation; }
 
-#info_2 {
-	position: fixed;
-	left: 0vw;
-	top: 40vh;
-	margin: auto;
-}
-div#info_2 ul { padding-left: 0; list-style-type: none; text-align: left; }
-
-#info {
-	position: fixed;
-	right: 0;
-	top: 10vh;
-	margin: auto;
-}
-div#info ul { list-style-type: none; text-align: right; }
-
-button {
-	list-style-type: none;
-	margin-top: 0vh;
-	margin-bottom: 4vh;
-	margin-right: 0vw;
-	margin-left: 0vw;
-	background-color: #005050;
-	border-style: none;
-	color: white;
-	font-size: 1.4vw;
-	padding: 0.4em 0.9em;
-	border-radius: 4px;
-}
-button.on { background-color: #00a0a0; color: #003030; }
-
-#myCanvas {
+canvas#myCanvas {
 	display: block;
 	position: fixed;
 	top: 0; left: 0;
 	width: 100%;
 	height: 100%;
-	background-color: #003d3d;
+	background-color: #faf4ee;
 }
+
+#info, #info2 {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	color: #4a4038;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+.grp {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button, .val {
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+}
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+.val { min-width: 5.6em; text-align: center; color: #3f362e; }
 </style>
 </head>
-
 <body>
 
-<div id="info">
-	<ul>
-		<br>
-		<li><button id="m1" onclick="menu1()">屈折なし</button></li>
-		<li><button id="m2" onclick="menu2()">屈折１　</button></li>
-		<li><button id="m3" onclick="menu3()">屈折２　</button></li>
-		<li><button id="theta1">入射角 小</button></li>
-		<li><button id="theta2">入射角 大</button></li>
-	</ul>
-</div>
-
-<div id="info_2">
-	<ul>
-		<li><button onclick="shinkouOn()">進行表示</button></li>
-		<li><button onclick="shinkouOff()">進行消去</button></li>
-		<li><button id="up">描画↑</button></li>
-		<li><button id="down">描画↓</button></li>
-		<li><button onclick="stop()">停止/再開</button></li>
-		<li><button onclick="buttonBack()">　戻る　</button></li>
-	</ul>
-</div>
-
 <canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<span class="grp">
+		<button onclick="setDeg(-5)">－</button>
+		<span class="val" id="degVal">入射角 40°</span>
+		<button onclick="setDeg(5)">＋</button>
+	</span>
+	<span class="grp">
+		<button id="md1" onclick="setMedium(1)">屈折なし</button>
+		<button id="md2" onclick="setMedium(2)">遅い媒質へ</button>
+		<button id="md3" onclick="setMedium(3)">速い媒質へ</button>
+	</span>
+	<span class="grp">
+		<button id="mo1" onclick="setMode(1)">波面の動き</button>
+		<button id="mo2" onclick="setMode(2)">ホイヘンスの原理</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<div id="info2">
+	<button id="rayBtn" onclick="toggleRay()">射線と角度</button>
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+		<button onclick="restart()">最初から</button>
+	</span>
+</div>
 
 <script>
 "use strict";
 
 /* ============================================================
-   光の屈折（屈折の法則）
+   波の屈折（屈折の法則）
    参照: https://physics.cloudfree.jp/main/osci_wave/kussetsu_law-m/
-   を忠実に再現したもの（配色・メニュー構成・押しっぱなしで角度が
-   変わる操作感・入射/屈折の描き方をそのまま踏襲）。
-   キャンバスの実サイズは画面幅に合わせて決め、その中で
-   1366x768 を基準にした縮尺 kx, ky を使う。
+   境界（水平）の上が媒質1、下が媒質2。平面波の「山」の波面を線で描く。
+
+   ■ 波面の動き
+     波面は「位相が同じ点」を結んだ線。媒質1での位相を距離に換算すると
+       S1(x, y) = x sinθ1 − y cosθ1          （入射波）
+     媒質2では速さが v2 なので、波長が λ1·v2/v1 に縮む（伸びる）。
+     境界で位相がつながる条件から
+       S2(x, y) = x sinθ1 − (v1/v2) y cosθ2   （屈折波）
+     ここで sinθ2 = (v2/v1) sinθ1 （屈折の法則）。
+     「S = s − kλ1（k = 0, 1, 2 …）」を満たす直線が k 番目の山。
+     s を時間とともに増やすと波面が進む（最初は画面外から入ってくる）。
+     sinθ2 > 1 のときは屈折波ができず、全反射の反射波（x sinθ1 + y cosθ1）を描く。
+
+   ■ ホイヘンスの原理
+     波面 AB の端 A が境界に届いてから、B が境界上の B′ に届くまでの間に、
+     境界上の各点から媒質2側に素元波（半円）が広がる。
+     A からの素元波の半径は AA′ = v2 t、BB′ = v1 t。
+     B′ から引いた共通接線 A′B′ が屈折波の波面になる。
+
+   座標：仮想 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   （境界の中心 O を原点に、x は右、y は上を正にとって計算する）
    ============================================================ */
 
-const canvas = document.getElementById("myCanvas");
-const ctx = canvas.getContext("2d");
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
 
-let wx = 0, wy = 0;
-let kx = 1, ky = 1;
-const wxo = 1366, wyo = 768;
+const VH = 768;
+const VWmin = 1100;
+let k = 1, VWv = 1366, offY = 0;
+let OX = 683;                   // 境界の中心 O の x（仮想座標）
+const OY = 320;                 // 境界の高さ
+const FB = 650;                 // 図の下端（この下はボタン）
 
-function resizeCanvas() {
-	const dpr = Math.min(window.devicePixelRatio || 1, 2);
-	wx = Math.round((canvas.clientWidth || window.innerWidth) * dpr);
-	wy = Math.round((canvas.clientHeight || window.innerHeight) * dpr);
-	canvas.width = wx;
-	canvas.height = wy;
-	kx = wx / wxo;
-	ky = wy / wyo;
-}
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 300));
+const PI = Math.PI, sin = Math.sin, cos = Math.cos;
+
+const LAM   = 90;               // 媒質1での波長 λ1
+const SPEED = 90;               // 媒質1での速さ（1秒で1波長）
+const RATIOS = { 1: 1.0, 2: 0.7, 3: 1.4 };   // v2 / v1
+
+/* ---------- 色 ---------- */
+const BG     = "#faf4ee";
+const INK    = "#3f362e";
+const SUB    = "#7a6e62";
+const BLUE   = "#0060d0";       // 入射波
+const GREEN  = "#009a3a";       // 屈折波
+const RED    = "#e00000";       // 反射波（全反射のとき）
+const ORANGE = "#e07000";       // 素元波
+const TINT   = { 1: "#faf4ee", 2: "#e1ecf0", 3: "#f5eed6" };
 
 /* ---------- 状態 ---------- */
-const pi = Math.PI;
-let pause_flag = 0;
-let z1 = [], z2 = [];
-let th1 = pi / 6;
-let menu = 1;
-let shinkouLine = 0;
-let num = 40;
-let v, v0;
-let ramda0, ramda2;
-let n = 1;
+let deg = 40;                   // 入射角
+let medium = 2;                 // 1:屈折なし 2:遅い媒質へ 3:速い媒質へ
+let mode = 1;                   // 1:波面の動き 2:ホイヘンスの原理
+let showRay = true;
+let paused = false;
+let speedMul = 1;
+let D = 0;                      // 波面が進んだ距離
+let hu = 0;                     // ホイヘンスの作図の経過時間
 
-let sin1, cos1, tan1, sin2, cos2, tan2, th2;
+const H_PRE = 1.5, H_GROW = 5.0, H_HOLD = 5.0;
+const HW = 520;                 // ホイヘンスの作図で使う AB′ の長さ
 
-function kakudo() {
-	sin1 = Math.sin(th1); cos1 = Math.cos(th1); tan1 = Math.tan(th1);
-	sin2 = sin1 / n; cos2 = Math.sqrt(1 - sin2 * sin2); tan2 = sin2 / cos2;
-	th2 = Math.atan(sin2 / cos2);
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	k = Math.min(cv.height / VH, cv.width / VWmin);
+	VWv = cv.width / k;
+	offY = (cv.height - VH * k) / 2;
+	OX = VWv / 2;
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   角度まわり
+   ============================================================ */
+function geom() {
+	const th1 = deg * PI / 180;
+	const s1 = sin(th1), c1 = cos(th1);
+	const q = RATIOS[medium];                 // v2 / v1
+	const s2 = q * s1;
+	const tir = s2 > 1 + 1e-9;
+	const c2 = tir ? 0 : Math.sqrt(Math.max(0, 1 - s2 * s2));
+	return { th1, s1, c1, q, s2, c2, tir, th2: tir ? null : Math.asin(Math.min(1, s2)) };
 }
 
-function hamen_sakusei() {
-	if (menu === 1) {
-		for (let i = 0; i < num; i++) z1[i] = ramda0 * (5 + i);
-	} else {
-		for (let i = 0; i < num; i++) z1[i] = ramda0 * (5 + i);
-		for (let i = 0; i < num; i++) z2[i] = ramda2 * (5 + i);
+// 計算用の座標 → 画面（仮想）座標
+function sx(x) { return OX + x; }
+function sy(y) { return OY - y; }
+
+/* ============================================================
+   直線を長方形で切り取る（a x + b y = c）
+   ============================================================ */
+function clipLine(a, b, c, x0, x1, y0, y1) {
+	const n2 = a * a + b * b;
+	const len = Math.sqrt(n2);
+	const px = a * c / n2, py = b * c / n2;
+	const ux = -b / len, uy = a / len;
+	let t0 = -1e6, t1 = 1e6;
+	const P = [-ux, ux, -uy, uy];
+	const Q = [px - x0, x1 - px, py - y0, y1 - py];
+	for (let i = 0; i < 4; i++) {
+		if (Math.abs(P[i]) < 1e-12) {
+			if (Q[i] < 0) return null;
+		} else {
+			const r = Q[i] / P[i];
+			if (P[i] < 0) { if (r > t1) return null; if (r > t0) t0 = r; }
+			else          { if (r < t0) return null; if (r < t1) t1 = r; }
+		}
 	}
+	if (t1 - t0 < 1e-6) return null;
+	return [px + t0 * ux, py + t0 * uy, px + t1 * ux, py + t1 * uy];
 }
 
-function initParams() {
-	v0 = (wy / 384) * 1.5;
-	v = v0;
-	ramda0 = wy / 12;
-	kakudo();
-	hamen_sakusei();
+function rangeOf(a, b, x0, x1, y0, y1) {
+	const v = [a * x0 + b * y0, a * x0 + b * y1, a * x1 + b * y0, a * x1 + b * y1];
+	return [Math.min.apply(null, v), Math.max.apply(null, v)];
 }
 
-/* ---------- メニュー ---------- */
-function menu1() { menu = 1; n = 1;      ramda2 = ramda0 / n; kakudo(); hamen_sakusei(); markButtons(); }
-function menu2() { menu = 2; n = 1.4142; ramda2 = ramda0 / n; kakudo(); hamen_sakusei(); markButtons(); }
-function menu3() { menu = 3; n = 0.8165; ramda2 = ramda0 / n; kakudo(); hamen_sakusei(); markButtons(); }
-
-function markButtons() {
-	document.getElementById("m1").classList.toggle("on", menu === 1);
-	document.getElementById("m2").classList.toggle("on", menu === 2);
-	document.getElementById("m3").classList.toggle("on", menu === 3);
+// 位相 a x + b y = s − kλ1 の山を、領域の中に描く
+function drawCrests(a, b, s, x0, x1, y0, y1, col, wid) {
+	const mm = rangeOf(a, b, x0, x1, y0, y1);
+	let c = s;
+	if (c > mm[1]) c -= Math.floor((c - mm[1]) / LAM) * LAM;
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid;
+	ctx.lineCap = "round";
+	ctx.beginPath();
+	for (; c >= mm[0]; c -= LAM) {
+		const seg = clipLine(a, b, c, x0, x1, y0, y1);
+		if (!seg) continue;
+		ctx.moveTo(sx(seg[0]), sy(seg[1]));
+		ctx.lineTo(sx(seg[2]), sy(seg[3]));
+	}
+	ctx.stroke();
 }
 
-function shinkouOn()  { shinkouLine = 1; }
-function shinkouOff() { shinkouLine = 0; }
-function buttonBack() { window.history.back(); }
-
-let animId = null;
-function stop() {
-	if (pause_flag === 1) { pause_flag = 0; animId = requestAnimationFrame(animate); }
-	else                  { pause_flag = 1; cancelAnimationFrame(animId); }
-}
-
-/* ---------- 押しっぱなしで変化するボタン（入射角・描画速度） ---------- */
-function holdRepeat(el, fn) {
-	let timer = null;
-	const start = (e) => { e.preventDefault(); if (timer) return; fn(); timer = setInterval(fn, 50); };
-	const stopHold = () => { clearInterval(timer); timer = null; };
-	el.addEventListener("pointerdown", start);
-	el.addEventListener("pointerup", stopHold);
-	el.addEventListener("pointerleave", stopHold);
-	el.addEventListener("pointercancel", stopHold);
-}
-holdRepeat(document.getElementById("theta1"), () => { th1 -= 0.02; if (th1 < 0) th1 = 0; kakudo(); });
-holdRepeat(document.getElementById("theta2"), () => { th1 += 0.02; if (th1 > pi / 3) th1 = pi / 3; kakudo(); });
-holdRepeat(document.getElementById("up"),   () => { v += 0.2; if (v > 6) v = 6; });
-holdRepeat(document.getElementById("down"), () => { v -= 0.2; if (v < 0) v = 0; });
-
-/* ---------- 描画 ---------- */
-function fillRect2(cx, cy, dx, dy, th) {
+/* ============================================================
+   描画の小道具（すべて仮想座標）
+   ============================================================ */
+function line(x1, y1, x2, y2, col, wid, dash) {
 	ctx.save();
-	ctx.translate(cx, cy);
-	ctx.rotate(-th);
-	ctx.fillRect(-dx / 2, -dy / 2, dx, dy);
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid;
+	ctx.lineCap = "round";
+	if (dash) ctx.setLineDash(dash);
+	ctx.beginPath();
+	ctx.moveTo(x1, y1);
+	ctx.lineTo(x2, y2);
+	ctx.stroke();
 	ctx.restore();
 }
 
-function animate() {
-	animId = requestAnimationFrame(animate);
-
-	ctx.fillStyle = "rgb(0, 51, 51)";
-	ctx.fillRect(0, 0, wx, wy);
-
-	if (menu === 2) { ctx.fillStyle = "rgb(0, 10, 10)"; ctx.fillRect(0, 0, wx, wy / 2); }
-	if (menu === 3) { ctx.fillStyle = "rgb(0, 10, 10)"; ctx.fillRect(0, wy / 2, wx, wy); }
-
-	ctx.strokeStyle = "rgb(255,255,255)";
-	ctx.lineWidth = 0.5;
-	ctx.beginPath(); ctx.moveTo(wx / 2, 0); ctx.lineTo(wx / 2, wy); ctx.stroke();
-	ctx.beginPath(); ctx.moveTo(0, wy / 2); ctx.lineTo(wx, wy / 2); ctx.stroke();
-
-	const LW = 8, LC = "rgb(255,0,0)";
-	if (shinkouLine === 1) {
-		ctx.strokeStyle = LC; ctx.lineWidth = LW;
-		ctx.beginPath();
-		ctx.moveTo(wx / 2, wy / 2); ctx.lineTo(wx / 2 - wy / 2 * tan1, 0);
-		ctx.stroke();
-		if (menu === 1) {
-			ctx.beginPath();
-			ctx.moveTo(wx / 2, wy / 2); ctx.lineTo(wx / 2 + wy / 2 * tan1, wy);
-			ctx.stroke();
-		} else {
-			ctx.beginPath();
-			ctx.moveTo(wx / 2, wy / 2); ctx.lineTo(wx / 2 + wy / 2 * tan2, wy);
-			ctx.stroke();
-		}
-	}
-
-	if (menu === 1) {
-		for (let i = 0; i < 35; i++) {
-			z1[i] -= v;
-			if (z1[i] < -15 * ramda0) z1[i] = 15 * ramda0 + z1[i] + 15 * ramda0;
-			const x1 = -200 * kx, y1 = z1[i], x2 = 200 * kx, y2 = z1[i];
-			const xx2 = x2 * cos1 - y2 * sin1, yy2 = x2 * sin1 + y2 * cos1;
-			const xx1 = x1 * cos1 - y1 * sin1, yy1 = x1 * sin1 + y1 * cos1;
-			const l = Math.hypot(xx1 - xx2, yy1 - yy2);
-			ctx.fillStyle = "rgb(255,255,255)";
-			fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th1);
-		}
-	} else {
-		for (let i = 0; i < 30; i++) {
-			z1[i] -= v;
-			if (z1[i] < -7 * ramda0) z1[i] = 23 * ramda0 + z1[i] + 7 * ramda0;
-			const x1 = -200 * kx, y1 = z1[i], x2 = 200 * kx, y2 = z1[i];
-			const xx2 = x2 * cos1 - y2 * sin1, yy2 = x2 * sin1 + y2 * cos1;
-			if (yy2 >= 0) {
-				let xx1 = x1 * cos1 - y1 * sin1, yy1 = x1 * sin1 + y1 * cos1;
-				if (yy1 < 0) { xx1 = xx1 - yy1 / tan1; yy1 = 0; }
-				const l = Math.hypot(xx1 - xx2, yy1 - yy2);
-				ctx.fillStyle = "rgb(255,255,255)";
-				fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th1);
-			}
-		}
-		for (let i = 0; i < 33; i++) {
-			z2[i] -= v / n;
-			if (z2[i] < -16 * ramda2) z2[i] = 7 * ramda2 + z2[i] + 16 * ramda2;
-			const x1 = -200 * kx * cos2 / cos1, y1 = z2[i], x2 = 200 * kx * cos2 / cos1, y2 = z2[i];
-			const xx1 = x1 * cos2 - y1 * sin2, yy1 = x1 * sin2 + y1 * cos2;
-			if (yy1 <= 0) {
-				let xx2 = x2 * cos2 - y2 * sin2, yy2 = x2 * sin2 + y2 * cos2;
-				if (yy2 > 0) { xx2 = xx2 - yy2 / tan2; yy2 = 0; }
-				const l = Math.hypot(xx1 - xx2, yy1 - yy2);
-				ctx.fillStyle = menu === 2 ? "rgb(0,255,255)" : "rgb(0,255,0)";
-				fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th2);
-			}
-		}
-	}
+function arrow(x1, y1, x2, y2, col, wid, dash) {
+	const ang = Math.atan2(y2 - y1, x2 - x1);
+	const hl = 8 + wid * 3.2, hw = 5 + wid * 2;
+	const bx = x2 - hl * cos(ang), by = y2 - hl * sin(ang);
+	line(x1, y1, bx, by, col, wid, dash);
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.beginPath();
+	ctx.moveTo(x2, y2);
+	ctx.lineTo(bx - hw * sin(ang), by + hw * cos(ang));
+	ctx.lineTo(bx + hw * sin(ang), by - hw * cos(ang));
+	ctx.closePath();
+	ctx.fill();
+	ctx.restore();
 }
 
-/* ---------- 開始 ---------- */
-resizeCanvas();
-menu = 1; n = 1;
-initParams();
-ramda2 = ramda0 / n;
-markButtons();
-animId = requestAnimationFrame(animate);
+function dot(x, y, r, col) {
+	ctx.fillStyle = col;
+	ctx.beginPath();
+	ctx.arc(x, y, r, 0, 2 * PI);
+	ctx.fill();
+}
 
-document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-document.oncontextmenu = () => false;
+function label(text, x, y, col, size, align) {
+	ctx.save();
+	ctx.font = "700 " + (size || 22) + "px " + getComputedStyle(document.body).fontFamily;
+	ctx.textAlign = align || "center";
+	ctx.textBaseline = "middle";
+	ctx.lineWidth = 5;
+	ctx.strokeStyle = "rgba(250,244,238,0.9)";
+	ctx.strokeText(text, x, y);
+	ctx.fillStyle = col;
+	ctx.fillText(text, x, y);
+	ctx.restore();
+}
+
+// 角度の弧（画面の角度 a0 → a1）と文字
+function angleArc(cx, cy, r, a0, a1, col, text) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = 2.5;
+	ctx.beginPath();
+	ctx.arc(cx, cy, r, a0, a1);
+	ctx.stroke();
+	ctx.restore();
+	const am = (a0 + a1) / 2;
+	label(text, cx + (r + 22) * cos(am), cy + (r + 22) * sin(am), col, 22);
+}
+
+// 左上の説明パネル
+function textBox(lines, x, y) {
+	if (!lines.length) return;
+	ctx.save();
+	const fam = getComputedStyle(document.body).fontFamily;
+	ctx.font = "600 21px " + fam;
+	let w = 0;
+	for (const s of lines) w = Math.max(w, ctx.measureText(s).width);
+	const lh = 32, pad = 14;
+	const hgt = lines.length * lh + pad * 2 - 6;
+	ctx.fillStyle = "rgba(255,253,250,0.93)";
+	ctx.strokeStyle = "rgba(74,64,56,0.18)";
+	ctx.lineWidth = 1.5;
+	ctx.beginPath();
+	if (ctx.roundRect) ctx.roundRect(x, y, w + pad * 2, hgt, 12);
+	else ctx.rect(x, y, w + pad * 2, hgt);
+	ctx.fill();
+	ctx.stroke();
+	ctx.fillStyle = INK;
+	ctx.textBaseline = "top";
+	lines.forEach(function (s, i) { ctx.fillText(s, x + pad, y + pad + i * lh); });
+	ctx.restore();
+}
+
+function fmt(v, d) { return v.toFixed(d); }
+
+/* ============================================================
+   背景（2つの媒質と境界）
+   ============================================================ */
+function drawStage(g) {
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(k, 0, 0, k, 0, offY);
+
+	ctx.fillStyle = TINT[medium];
+	ctx.fillRect(0, OY, VWv, FB - OY);
+	line(0, OY, VWv, OY, INK, 3);
+
+	const q = g.q;
+	label("媒質1　速さ v₁", 22, OY - 22, SUB, 20, "left");
+	const t2 = (medium === 1) ? "媒質2　速さ v₂ ＝ v₁"
+	         : "媒質2　速さ v₂ ＝ " + fmt(q, 1) + " v₁（" + (q < 1 ? "遅い" : "速い") + "）";
+	label(t2, 22, FB - 24, SUB, 20, "left");
+}
+
+/* ============================================================
+   波面の動き
+   ============================================================ */
+function drawWaves(g) {
+	const x0 = -OX, x1 = VWv - OX;
+	const yTop = OY, yBot = OY - FB;
+
+	// 波の先頭が左上の画面外から入ってくるように、始まりの位相を決める
+	const s0 = rangeOf(g.s1, -g.c1, x0, x1, 0, yTop)[0] - 4;
+	const s = s0 + D;
+
+	drawCrests(g.s1, -g.c1, s, x0, x1, 0, yTop, BLUE, 4);
+	if (g.tir) {
+		drawCrests(g.s1, g.c1, s, x0, x1, 0, yTop, RED, 4);
+	} else {
+		drawCrests(g.s1, -g.c2 / g.q, s, x0, x1, yBot, 0, GREEN, 4);
+	}
+
+	if (showRay) drawRays(g);
+}
+
+function drawRays(g) {
+	const R = 210;
+	line(OX, 8, OX, FB - 8, SUB, 2, [9, 8]);
+	// 入射
+	arrow(OX - R * g.s1, OY - R * g.c1, OX, OY, INK, 4);
+	angleArc(OX, OY, 70, -PI / 2 - g.th1, -PI / 2, BLUE, "θ₁");
+	if (g.tir) {
+		arrow(OX, OY, OX + R * g.s1, OY - R * g.c1, INK, 4);
+		angleArc(OX, OY, 70, -PI / 2, -PI / 2 + g.th1, RED, "θ₁′");
+	} else {
+		arrow(OX, OY, OX + R * g.s2, OY + R * g.c2, INK, 4);
+		angleArc(OX, OY, 70, PI / 2 - g.th2, PI / 2, GREEN, "θ₂");
+	}
+
+	const lines = ["入射角 θ₁ ＝ " + deg + "°"];
+	if (g.tir) {
+		lines.push("sinθ₂ ＝ (v₂/v₁) sinθ₁ ＝ " + fmt(g.s2, 2) + " ＞ 1");
+		lines.push("→ 屈折波はできない（全反射）");
+	} else {
+		lines.push("屈折角 θ₂ ＝ " + fmt(g.th2 * 180 / PI, 1) + "°");
+		if (medium !== 1) {
+			lines.push("sinθ₁ / sinθ₂ ＝ " + fmt(g.s1, 3) + " / " + fmt(g.s2, 3) + " ＝ " + fmt(g.s1 / g.s2, 2));
+			lines.push("v₁ / v₂ ＝ λ₁ / λ₂ ＝ " + fmt(1 / g.q, 2));
+		}
+	}
+	textBox(lines, 16, 14);
+}
+
+/* ============================================================
+   ホイヘンスの原理
+   ============================================================ */
+function drawHuygens(g) {
+	const xA = -HW / 2, xE = HW / 2;
+	const f = Math.max(0, Math.min(1, (hu - H_PRE) / H_GROW));
+	const stage = (hu < H_PRE) ? 1 : (f < 1) ? 2 : 3;
+	const X = xA + f * HW;                    // いま波面が境界に届いている点
+	const L = HW * g.s1;                      // BB′ の長さ
+	const Bx = xE - L * g.s1, By = L * g.c1;  // はじめの B
+	const Px = Bx + f * L * g.s1, Py = By - f * L * g.c1;   // B が今いる点
+
+	// はじめの波面 AB（うすく）
+	line(sx(xA), sy(0), sx(Bx), sy(By), BLUE, 3, stage === 1 ? null : [10, 8]);
+	// 入射波の進む向き（B → B′）
+	if (f > 0.02) arrow(sx(Bx), sy(By), sx(Px), sy(Py), BLUE, 2.5, [8, 7]);
+	// いまの入射波面（境界の上に残っている部分）
+	if (f < 1) line(sx(X), sy(0), sx(Px), sy(Py), BLUE, 5);
+
+	// 素元波
+	const src = [0, 1, 2, 3, 4].map(function (j) { return xA + j * HW / 5; });
+	ctx.save();
+	for (let j = 0; j < src.length; j++) {
+		const xj = src[j];
+		if (X <= xj) continue;
+		const rho = (X - xj) * g.s1 * g.q;
+		ctx.strokeStyle = ORANGE;
+		ctx.lineWidth = (j === 0) ? 3 : 1.8;
+		ctx.globalAlpha = (j === 0) ? 1 : 0.75;
+		ctx.beginPath();
+		ctx.arc(sx(xj), sy(0), rho, 0, PI);
+		ctx.stroke();
+	}
+	ctx.restore();
+	for (const xj of src) if (X > xj || xj === xA) dot(sx(xj), sy(0), 5, ORANGE);
+
+	// 屈折波の波面 A′B′（B′ から素元波への接線）
+	const r0 = (X - xA) * g.s1 * g.q;
+	let Qx = 0, Qy = 0;
+	if (!g.tir && f > 0) {
+		Qx = xA + r0 * g.s2;
+		Qy = -r0 * g.c2;
+		arrow(sx(xA), sy(0), sx(Qx), sy(Qy), GREEN, 2.5, [8, 7]);
+		line(sx(X), sy(0), sx(Qx), sy(Qy), GREEN, 5);
+	}
+
+	// 点と記号
+	dot(sx(xA), sy(0), 7, INK);
+	label("A", sx(xA) - 24, sy(0) - 20, INK, 24);
+	dot(sx(Bx), sy(By), 6, INK);
+	label("B", sx(Bx) + 4, sy(By) - 24, INK, 24);
+	if (f > 0) dot(sx(Px), sy(Py), 6, BLUE);
+	if (stage === 3) {
+		label("B′", sx(xE) + 24, sy(0) - 20, INK, 24);
+		dot(sx(xE), sy(0), 7, INK);
+		// 境界と波面のなす角
+		angleArc(sx(xA), sy(0), 64, -g.th1, 0, BLUE, "θ₁");
+		label("v₁t", sx((Bx + xE) / 2) + 30, sy(By / 2) - 6, BLUE, 22);
+		if (!g.tir) {
+			dot(sx(Qx), sy(Qy), 7, INK);
+			label("A′", sx(Qx) - 26, sy(Qy) + 16, INK, 24);
+			angleArc(sx(xE), sy(0), 64, PI - g.th2, PI, GREEN, "θ₂");
+			label("v₂t", sx(Qx / 2 + xA / 2) - 30, sy(Qy / 2) - 4, GREEN, 22);
+		}
+	}
+
+	let lines;
+	if (stage === 1) {
+		lines = ["① 波面 AB の端 A が、境界に届いた。"];
+	} else if (stage === 2) {
+		lines = ["② B が B′ まで進む時間 t のあいだに、",
+		         "　境界の各点から媒質2へ素元波（半円）が広がる。",
+		         "　BB′ ＝ v₁t 、 A からの素元波の半径 ＝ v₂t"];
+	} else if (g.tir) {
+		lines = ["③ A からの素元波の半径 v₂t が AB′ より大きく、",
+		         "　B′ から接線が引けない。",
+		         "　→ 屈折波はできない（全反射）"];
+	} else {
+		lines = ["③ B′ から素元波に引いた接線 A′B′ が屈折波の波面。",
+		         "　sinθ₁ ＝ BB′/AB′ 、 sinθ₂ ＝ AA′/AB′",
+		         "　→ sinθ₁ / sinθ₂ ＝ v₁t / v₂t ＝ v₁ / v₂"];
+	}
+	textBox(lines, 16, 14);
+}
+
+/* ============================================================
+   本体
+   ============================================================ */
+function draw() {
+	const g = geom();
+	drawStage(g);
+	if (mode === 1) drawWaves(g);
+	else            drawHuygens(g);
+}
+
+let lastT = null;
+function animate(ts) {
+	if (lastT === null) lastT = ts;
+	const dt = Math.min(0.05, Math.max(0, (ts - lastT) / 1000));
+	lastT = ts;
+	if (!paused) step(dt);
+	draw();
+	requestAnimationFrame(animate);
+}
+
+function step(dt) {
+	const d = dt * speedMul;
+	D += SPEED * d;
+	if (D > 12000) D -= Math.floor((D - 8000) / LAM) * LAM;   // 画面が埋まった後は位相を戻しても見た目は同じ
+	hu += d;
+	if (hu > H_PRE + H_GROW + H_HOLD) hu = 0;
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function setDeg(dd)   { deg = Math.max(10, Math.min(70, deg + dd)); markButtons(); }
+function setMedium(m) { medium = m; hu = 0; markButtons(); }
+function setMode(m)   { mode = m; hu = 0; markButtons(); }
+function toggleRay()  { showRay = !showRay; markButtons(); }
+function stop()       { paused = !paused; }
+function up()         { speedMul = Math.min(4, speedMul + 0.25); }
+function down()       { speedMul = Math.max(0, speedMul - 0.25); }
+function restart()    { D = 0; hu = 0; paused = false; }
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	document.getElementById("degVal").textContent = "入射角 " + deg + "°";
+	for (let n = 1; n <= 3; n++) document.getElementById("md" + n).classList.toggle("on", medium === n);
+	for (let n = 1; n <= 2; n++) document.getElementById("mo" + n).classList.toggle("on", mode === n);
+	const rb = document.getElementById("rayBtn");
+	rb.classList.toggle("on", showRay);
+	rb.style.visibility = (mode === 1) ? "visible" : "hidden";
+	draw();
+}
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+markButtons();
+requestAnimationFrame(animate);
 </script>
 </body>
 </html>
