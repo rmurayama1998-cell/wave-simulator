@@ -1,468 +1,305 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>波の反射（反射の法則）</title>
+	<meta charset="utf-8">
+	<title>波の反射（反射の法則）</title>
+	<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
 <style>
 * {
 	-moz-user-select: none;
 	-ms-user-select: none;
+	-khtml-user-select: none;
 	-webkit-user-select: none;
-	user-select: none;
-	-webkit-appearance: none;
+	-webkit-touch-callout: none;
 }
 html, body {
 	margin: 0;
 	padding: 0;
 	overflow: hidden;
-	width: 100%;
-	height: 100%;
-	background-color: #faf4ee;
+	background-color: #003d3d;
 }
 button, html, body, li { touch-action: manipulation; }
 
-canvas#myCanvas {
+#info_2 {
+	position: fixed;
+	left: 0vw;
+	top: 40vh;
+	margin: auto;
+}
+div#info_2 ul { padding-left: 0; list-style-type: none; text-align: left; }
+
+#info {
+	position: fixed;
+	right: 0;
+	top: 40vh;
+	margin: auto;
+}
+div#info ul { list-style-type: none; text-align: right; }
+
+button {
+	list-style-type: none;
+	margin-top: 0vh;
+	margin-bottom: 4vh;
+	margin-right: 0vw;
+	margin-left: 0vw;
+	background-color: #005050;
+	border-style: none;
+	color: white;
+	font-size: 1.4vw;
+	padding: 0.4em 0.9em;
+	border-radius: 4px;
+}
+button.on { background-color: #00a0a0; color: #003030; }
+
+#myCanvas {
 	display: block;
 	position: fixed;
 	top: 0; left: 0;
 	width: 100%;
 	height: 100%;
-	background-color: #faf4ee;
+	background-color: #003d3d;
 }
-
-#info, #info2 {
-	position: fixed;
-	left: 0;
-	width: 100%;
-	display: flex;
-	flex-wrap: wrap;
-	justify-content: center;
-	align-items: center;
-	gap: 8px 14px;
-	padding: 0 12px;
-	color: #4a4038;
-}
-#info  { bottom: 9vh; }
-#info2 { bottom: 2vh; }
-
-.grp {
-	display: inline-flex;
-	gap: 6px;
-	padding: 4px 5px;
-	background: rgba(74, 64, 56, 0.07);
-	border-radius: 999px;
-	align-items: center;
-}
-.lbl {
-	font-size: clamp(11px, 1.32vw, 20px);
-	font-weight: 600;
-	padding: 0 2px 0 8px;
-	white-space: nowrap;
-}
-
-button {
-	appearance: none;
-	-webkit-appearance: none;
-	padding: 0.36em 0.95em;
-	border: 0;
-	border-radius: 999px;
-	background: #fffdfa;
-	color: #4a4038;
-	font-family: inherit;
-	font-size: clamp(11px, 1.32vw, 20px);
-	font-weight: 600;
-	letter-spacing: 0.02em;
-	line-height: 1.15;
-	white-space: nowrap;
-	cursor: pointer;
-	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
-	transition: background-color .16s ease, color .16s ease,
-	            box-shadow .16s ease, transform .12s ease;
-}
-button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
-button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
-button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
-
-button.on {
-	background: #3f362e;
-	color: #fff8f0;
-	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
-}
-button.on:hover { background: #4a4038; }
 </style>
 </head>
+
 <body>
 
-<canvas id="myCanvas"></canvas>
-
 <div id="info">
-	<span class="grp">
-		<button id="e1" onclick="setEnd(1)">自由端</button>
-		<button id="e2" onclick="setEnd(2)">固定端</button>
-	</span>
-	<span class="grp">
-		<span class="lbl">入射角</span>
-		<button onclick="addAngle(-5)">−</button>
-		<button onclick="addAngle(5)">＋</button>
-	</span>
-	<button onclick="buttonBack()">戻る</button>
+	<ul>
+		<br>
+		<li><button id="m1" onclick="menu1()">反射なし</button></li>
+		<li><button id="m2" onclick="menu2()">自由端反射</button></li>
+		<li><button id="m3" onclick="menu3()">固定端反射</button></li>
+		<li><button id="theta1">入射角 小</button></li>
+		<li><button id="theta2">入射角 大</button></li>
+	</ul>
 </div>
 
-<div id="info2">
-	<span class="grp">
-		<button id="tray" onclick="toggleRay()">光線を表示</button>
-		<button id="thuy" onclick="toggleHuygens()">ホイヘンスの作図</button>
-		<button id="tval" onclick="toggleValues()">数値を表示</button>
-	</span>
-	<span class="grp">
-		<button onclick="stop()">停止／再開</button>
-		<button onclick="up()">描画↑</button>
-		<button onclick="down()">描画↓</button>
-	</span>
+<div id="info_2">
+	<ul>
+		<li><button onclick="shinkouOn()">進行表示</button></li>
+		<li><button onclick="shinkouOff()">進行消去</button></li>
+		<li><button id="up">描画↑</button></li>
+		<li><button id="down">描画↓</button></li>
+		<li><button onclick="stop()">停止/再開</button></li>
+		<li><button onclick="buttonBack()">　戻る　</button></li>
+	</ul>
 </div>
+
+<canvas id="myCanvas"></canvas>
 
 <script>
 "use strict";
 
 /* ============================================================
    波の反射（反射の法則）
-     境界に斜めから入ってきた波面（帯）が、境界で反射して戻る。
-     入射角 ＝ 反射角。境界の速さは変わらないので波長も変わらない。
-     自由端では反射波の山がそのまま、固定端では半波長ずれる（位相反転）。
-     「光線を表示」で中心の光線と角度、
-     「ホイヘンスの作図」で なぜ入射角＝反射角になるか（素元波の共通接線）。
-   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   参照: https://physics.cloudfree.jp/main/osci_wave/hansha_law-m/
+   を忠実に再現したもの（配色・メニュー構成・押しっぱなしで角度が
+   変わる操作感・入射/反射の描き方をそのまま踏襲）。
+   キャンバスの実サイズは画面幅に合わせて決め、その中で
+   1366x768 を基準にした縮尺 kx, ky を使う（参照サイトの
+   screen.width を使う方式は、ブラウザのタブで動かす都合上
+   clientWidth/Height ベースに置き換えている）。
    ============================================================ */
 
-const cv  = document.getElementById("myCanvas");
-const ctx = cv.getContext("2d");
+const canvas = document.getElementById("myCanvas");
+const ctx = canvas.getContext("2d");
 
-const VW = 1366, VH = 768;
-const MT = 16;
-const VWmin = 1200;
-let kx = 1, ky = 1;
-let offY = 0;
-let VWv = VW;
+let wx = 0, wy = 0;      // キャンバスの実ピクセルサイズ
+let kx = 1, ky = 1;      // 1366x768 基準からの縮尺
+const wxo = 1366, wyo = 768;
 
-const PI = Math.PI, sin = Math.sin, cos = Math.cos;
-const asin = Math.asin, sqrt = Math.sqrt, hypot = Math.hypot;
-const D2R = PI / 180;
-
-const INK   = "#4a4038";
-const SUB   = "#8c8175";
-const INCID = "#0060d0";
-const REFL  = "#e07800";
-
-let endType = 1;        // 1:自由端 2:固定端
-let angleDeg = 45;
-let showRay = false;
-let showHuy = false;
-let showValues = true;
-let paused = false;
-let t = 0;
-const dt0 = 0.015;
-let dt = 0.06;
-
-const OY = 384;
-const FIELD_TOP = 44, FIELD_BOT = 726;
-const LAM0 = 96;
-const BW = 300;
-function OX() { return VWv / 2; }
-
-/* ============================================================ */
-function resize() {
+function resizeCanvas() {
 	const dpr = Math.min(window.devicePixelRatio || 1, 2);
-	const w = cv.clientWidth  || window.innerWidth;
-	const h = cv.clientHeight || window.innerHeight;
-	if (!w || !h) return;
-	cv.width  = Math.round(w * dpr);
-	cv.height = Math.round(h * dpr);
-	let k = cv.height / (VH + MT);
-	k = Math.min(k, cv.width / VWmin);
-	kx = k; ky = k;
-	VWv = cv.width / k;
-	offY = (cv.height - (VH + MT) * k) / 2;
-	draw();
+	wx = Math.round((canvas.clientWidth || window.innerWidth) * dpr);
+	wy = Math.round((canvas.clientHeight || window.innerHeight) * dpr);
+	canvas.width = wx;
+	canvas.height = wy;
+	kx = wx / wxo;
+	ky = wy / wyo;
 }
-window.addEventListener("resize", resize);
-window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+window.addEventListener("resize", resizeCanvas);
+window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 300));
 
-function theta1() { return angleDeg * D2R; }
+/* ---------- 状態 ---------- */
+const pi = Math.PI;
+let pause_flag = 0;
+let z1 = [], z2 = [], z3 = [];
+let th1 = pi / 4;
+let menu = 1;
+let shinkouLine = 0;
+let num = 40;
+let v, v0;
+let ramda0, ramda2;
+const n = 1;                 // 反射のみ扱うので媒質は変えない
+let dy_kyoukai;               // 境界線を中心からどれだけ下げるか
 
-/* ---------- 小道具 ---------- */
-function label(txt, vx, vy, sizeV, col, align) {
-	ctx.save();
-	ctx.fillStyle = col;
-	ctx.font = "600 " + (sizeV * ky) + "px 'Hiragino Kaku Gothic ProN','Meiryo',system-ui,sans-serif";
-	ctx.textAlign = align || "left";
-	ctx.textBaseline = "middle";
-	ctx.fillText(txt, vx * kx, vy * ky);
-	ctx.restore();
-}
-function seg(x1, y1, x2, y2, wid, col, dash) {
-	ctx.save();
-	ctx.strokeStyle = col;
-	ctx.lineWidth = wid * kx;
-	ctx.lineCap = "round";
-	if (dash) ctx.setLineDash(dash.map(d => d * kx));
-	ctx.beginPath();
-	ctx.moveTo(x1 * kx, y1 * ky);
-	ctx.lineTo(x2 * kx, y2 * ky);
-	ctx.stroke();
-	ctx.restore();
-}
-function arrowAt(x, y, dx, dy, sizeV, col) {
-	const a = Math.atan2(dy, dx), s = sizeV;
-	ctx.save();
-	ctx.fillStyle = col;
-	ctx.translate(x * kx, y * ky);
-	ctx.rotate(a);
-	ctx.beginPath();
-	ctx.moveTo(s * kx, 0);
-	ctx.lineTo(-s * 0.6 * kx, s * 0.55 * kx);
-	ctx.lineTo(-s * 0.6 * kx, -s * 0.55 * kx);
-	ctx.closePath();
-	ctx.fill();
-	ctx.restore();
-}
-function dot(x, y, r, fill, ring, ringW) {
-	ctx.save();
-	ctx.beginPath();
-	ctx.arc(x * kx, y * ky, r * kx, 0, 2 * PI);
-	if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-	if (ring) { ctx.lineWidth = (ringW || 3) * kx; ctx.strokeStyle = ring; ctx.stroke(); }
-	ctx.restore();
-}
-function angleArc(cx, cy, a0, a1, r, col, txt, txtR) {
-	ctx.save();
-	ctx.strokeStyle = col;
-	ctx.lineWidth = 2.4 * kx;
-	ctx.beginPath();
-	ctx.arc(cx * kx, cy * ky, r * kx, a0, a1, a1 < a0);
-	ctx.stroke();
-	ctx.restore();
-	if (txt) {
-		const m = (a0 + a1) / 2;
-		label(txt, cx + Math.cos(m) * txtR, cy + Math.sin(m) * txtR, 23, col, "center");
-	}
-}
-// y=OY より上（y<=OY）の部分だけ描く
-function clipAbove(x1, y1, x2, y2, wid, col) {
-	const in1 = y1 <= OY, in2 = y2 <= OY;
-	if (in1 && in2) { seg(x1, y1, x2, y2, wid, col); return; }
-	if (!in1 && !in2) return;
-	const f = (OY - y1) / (y2 - y1);
-	const mx = x1 + (x2 - x1) * f;
-	if (in1) seg(x1, y1, mx, OY, wid, col);
-	else seg(mx, OY, x2, y2, wid, col);
+let sin1, cos1, tan1, sin2, cos2, tan2, th2;
+
+function kakudo() {
+	sin1 = Math.sin(th1); cos1 = Math.cos(th1); tan1 = Math.tan(th1);
+	sin2 = sin1 / n; cos2 = Math.sqrt(1 - sin2 * sin2); tan2 = sin2 / cos2;
+	th2 = Math.atan(sin2 / cos2);
 }
 
-/* ============================================================
-   背景（境界＝反射面）
-   ============================================================ */
-function drawStage() {
-	ctx.setTransform(1, 0, 0, 1, 0, 0);
-	ctx.fillStyle = "#faf4ee";
-	ctx.fillRect(0, 0, cv.width, cv.height);
-	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * ky);
-
-	// 境界の下（反射面の向こう）を薄く塗る
-	ctx.save();
-	ctx.fillStyle = "rgba(74, 64, 56, 0.08)";
-	ctx.fillRect(0, OY * ky, VWv * kx, (FIELD_BOT - OY) * ky);
-	ctx.restore();
-	// 反射面のハッチング
-	ctx.save();
-	ctx.strokeStyle = "rgba(74, 64, 56, 0.30)";
-	ctx.lineWidth = 1.4 * kx;
-	for (let x = 0; x < VWv + 40; x += 26) {
-		seg(x, OY, x - 20, OY + 20, 1.4, "rgba(74,64,56,0.28)");
-	}
-	ctx.restore();
-
-	seg(0, OY, VWv, OY, 3, INK);
-	seg(OX(), FIELD_TOP, OX(), OY, 1.6, "rgba(74,64,56,0.35)", [8, 6]);
-	label("法線", OX() + 10, FIELD_TOP + 12, 18, SUB);
-	label(endType === 1 ? "自由端（位相そのまま）" : "固定端（位相が反転）", 18, FIELD_BOT - 16, 22, INK);
-}
-
-/* ============================================================
-   波面（帯）：入射 → 反射
-   ============================================================ */
-function drawWaves() {
-	const th1 = theta1();
-	const s1 = sin(th1), c1 = cos(th1);
-	const ox = OX(), oy = OY;
-	const A = (t * 46) % LAM0;
-	const phi = (endType === 2) ? LAM0 / 2 : 0;   // 固定端は半波長ずらす
-
-	// 入射波面：中心 P_k は入射方向 d1=(s1,c1) 上
-	for (let k = -8; k <= 14; k++) {
-		const off = A - k * LAM0;
-		const pcx = ox + off * s1, pcy = oy + off * c1;
-		const ex = c1 * BW, ey = -s1 * BW;
-		clipAbove(pcx - ex, pcy - ey, pcx + ex, pcy + ey, 3.6, INCID);
-	}
-	// 反射波面：中心は反射方向 d1'=(s1,-c1) 上、波面は (c1,s1) 方向
-	for (let k = -8; k <= 14; k++) {
-		const off = A - k * LAM0 - phi;
-		const rcx = ox + off * s1, rcy = oy - off * c1;
-		const ex = c1 * BW, ey = s1 * BW;
-		clipAbove(rcx - ex, rcy - ey, rcx + ex, rcy + ey, 3.6, REFL);
-	}
-}
-
-/* ============================================================
-   光線（中心の進行方向）＋ 角度
-   ============================================================ */
-function drawRayOverlay() {
-	const th1 = theta1();
-	const ox = OX(), oy = OY, L = 260;
-	const dIx = sin(th1), dIy = cos(th1);
-	seg(ox - dIx * L, oy - dIy * L, ox, oy, 5, INK);
-	arrowAt(ox, oy, dIx, dIy, 15, INK);
-	const dRx = sin(th1), dRy = -cos(th1);
-	seg(ox, oy, ox + dRx * L, oy + dRy * L, 5, INK);
-	arrowAt(ox + dRx * L, oy + dRy * L, dRx, dRy, 15, INK);
-	dot(ox, oy, 5, INK);
-	if (showValues) {
-		angleArc(ox, oy, -PI / 2, -PI / 2 + th1, 66, INCID, th1 > 0.03 ? angleDeg.toFixed(0) + "°" : "", 96);
-		angleArc(ox, oy, -PI / 2, -PI / 2 - th1, 88, REFL, th1 > 0.03 ? angleDeg.toFixed(0) + "°" : "", 118);
-	}
-}
-
-/* ============================================================
-   ホイヘンスの作図（なぜ入射角＝反射角か）
-   ============================================================ */
-function drawHuygens() {
-	const th1 = theta1();
-	const oy = OY;
-	const s1 = sin(th1), c1 = cos(th1);
-	const xA = VWv * 0.28;
-	const v1s = 44;
-	const period = 5.4;
-	const tau = (t % period) / period;
-	const XMAX = 300;
-	const Tmax = XMAX * s1 / v1s;
-	const Tnow = Math.max(0.0001, tau * Tmax);
-	const Xnow = xA + v1s * Tnow / s1;
-
-	// 入射波面：点B(Xnow)から上へ
-	for (let m = 0; m <= 2; m++) {
-		const bx = Xnow + m * (LAM0 / s1);
-		const w = 210 - m * 34;
-		clipAbove(bx, oy, bx + c1 * w, oy - s1 * w, m === 0 ? 3.6 : 2.4,
-			m === 0 ? INCID : "rgba(0,96,208,0.4)");
-	}
-
-	// 素元波（半円）：同じ媒質なので入射と同じ速さ v1s で、境界の上へ広がる
-	for (let i = 0; i <= 7; i++) {
-		const X = xA + (Xnow - xA) * i / 7;
-		const age = Tnow - (X - xA) * s1 / v1s;
-		if (age <= 0.0001) { if (i > 0) dot(X, oy, 4, "rgba(74,64,56,0.35)"); continue; }
-		const r = v1s * age;
-		if (r <= 0.5) continue;
-		ctx.save();
-		ctx.strokeStyle = REFL;
-		ctx.globalAlpha = 0.85;
-		ctx.lineWidth = 1.8 * kx;
-		ctx.beginPath();
-		ctx.arc(X * kx, oy * ky, r * kx, PI, 2 * PI, false);   // 上半分
-		ctx.stroke();
-		ctx.restore();
-		dot(X, oy, 3.2, INK);
-	}
-
-	// 共通接線＝反射波面。速さが同じなので r0 / AB = sinθ1 → 反射角 ＝ 入射角
-	const r0 = v1s * Tnow;
-	const AB = Xnow - xA;
-	if (r0 > 0.5 && AB > 0.5) {
-		const ang = asin(Math.min(1, r0 / AB));
-		const dx = -cos(ang), dy = -sin(ang);
-		let len = 380;
-		if (oy + dy * len < FIELD_TOP) len = (FIELD_TOP - oy) / dy;   // 上端で止める
-		seg(Xnow, oy, Xnow + dx * len, oy + dy * len, 4.5, INK);
-		label("新しい波面（反射波）", Xnow + dx * (len * 0.7), oy + dy * (len * 0.7) - 20, 21, INK, "center");
-	}
-	dot(Xnow, oy, 6, INK, "#faf4ee", 2.5);
-	label("B（いま届いた点）", Xnow + 12, oy + 22, 18, SUB);
-	dot(xA, oy, 6, INK, "#faf4ee", 2.5);
-	label("A（先に届いた点）", xA - 12, oy + 22, 18, SUB, "right");
-
-	if (showValues) {
-		label("素元波は入射と同じ速さで広がる → 半径の並びが対称", 18, oy + 250, 20, INK);
-		label("→ 接線（反射波面）も対称 ＝ 反射角 ＝ 入射角", 18, oy + 276, 22, REFL);
-	}
-}
-
-/* ============================================================
-   数値パネル
-   ============================================================ */
-function drawReadout() {
-	if (!showValues) return;
-	const bw = 430, bh = 160, bx0 = VWv - bw - 16, by0 = FIELD_TOP;
-	ctx.save();
-	ctx.fillStyle = "rgba(255, 253, 250, 0.94)";
-	ctx.strokeStyle = "rgba(74, 64, 56, 0.30)";
-	ctx.lineWidth = 1.5 * kx;
-	ctx.beginPath();
-	ctx.roundRect(bx0 * kx, by0 * ky, bw * kx, bh * ky, 12 * kx);
-	ctx.fill(); ctx.stroke();
-	ctx.restore();
-	let y = by0 + 34;
-	label("入射角 θ₁ = " + angleDeg.toFixed(0) + "°", bx0 + 20, y, 25, INCID); y += 40;
-	label("反射角 = " + angleDeg.toFixed(0) + "°", bx0 + 20, y, 25, REFL); y += 34;
-	label("いつも 入射角 ＝ 反射角", bx0 + 20, y, 22, INK); y += 32;
-	label(endType === 1 ? "自由端：反射波は位相そのまま" : "固定端：反射波は半波長ずれる（位相反転）",
-		bx0 + 20, y, 19, SUB);
-}
-
-/* ============================================================ */
-function draw() {
-	drawStage();
-	if (showHuy) {
-		drawHuygens();
+function hamen_sakusei() {
+	if (menu === 1) {
+		for (let i = 0; i < num; i++) z1[i] = ramda0 * (5 + i);
 	} else {
-		drawWaves();
-		if (showRay) drawRayOverlay();
+		for (let i = 0; i < num; i++) z1[i] = ramda0 * (5 + i);
+		for (let i = 0; i < num; i++) z2[i] = ramda2 * (5 + i);
+		if (menu === 2) { for (let i = 0; i < num; i++) z3[i] = ramda2 * (-5 - i); }
+		if (menu === 3) { for (let i = 0; i < num; i++) z3[i] = ramda2 * (-5 - i - 0.5); }
 	}
-	drawReadout();
+}
+
+function initParams() {
+	v0 = (wy / 384) * 1.25;
+	v = v0;
+	ramda0 = wy / 12;
+	ramda2 = ramda0 / n;
+	dy_kyoukai = 100 * ky;
+	kakudo();
+	hamen_sakusei();
+}
+
+/* ---------- メニュー ---------- */
+function menu1() { menu = 1; kakudo(); hamen_sakusei(); markButtons(); }
+function menu2() { menu = 2; kakudo(); hamen_sakusei(); markButtons(); }
+function menu3() { menu = 3; kakudo(); hamen_sakusei(); markButtons(); }
+
+function markButtons() {
+	document.getElementById("m1").classList.toggle("on", menu === 1);
+	document.getElementById("m2").classList.toggle("on", menu === 2);
+	document.getElementById("m3").classList.toggle("on", menu === 3);
+}
+
+function shinkouOn()  { shinkouLine = 1; }
+function shinkouOff() { shinkouLine = 0; }
+function buttonBack() { window.history.back(); }
+
+let animId = null;
+function stop() {
+	if (pause_flag === 1) { pause_flag = 0; animId = requestAnimationFrame(animate); }
+	else                  { pause_flag = 1; cancelAnimationFrame(animId); }
+}
+
+/* ---------- 押しっぱなしで変化するボタン（入射角・描画速度） ---------- */
+function holdRepeat(el, fn) {
+	let timer = null;
+	const start = (e) => { e.preventDefault(); if (timer) return; fn(); timer = setInterval(fn, 50); };
+	const stopHold = () => { clearInterval(timer); timer = null; };
+	el.addEventListener("pointerdown", start);
+	el.addEventListener("pointerup", stopHold);
+	el.addEventListener("pointerleave", stopHold);
+	el.addEventListener("pointercancel", stopHold);
+}
+holdRepeat(document.getElementById("theta1"), () => { th1 -= 0.02; if (th1 < 0) th1 = 0; kakudo(); });
+holdRepeat(document.getElementById("theta2"), () => { th1 += 0.02; if (th1 > pi / 3) th1 = pi / 3; kakudo(); });
+holdRepeat(document.getElementById("up"),   () => { v += 0.2; if (v > 6) v = 6; });
+holdRepeat(document.getElementById("down"), () => { v -= 0.2; if (v < 0) v = 0; });
+
+/* ---------- 描画 ---------- */
+function fillRect2(cx, cy, dx, dy, th) {
+	ctx.save();
+	ctx.translate(cx, cy + dy_kyoukai);
+	ctx.rotate(-th);
+	ctx.fillRect(-dx / 2, -dy / 2, dx, dy);
+	ctx.restore();
 }
 
 function animate() {
-	requestAnimationFrame(animate);
-	if (!paused) t += dt;
-	draw();
+	animId = requestAnimationFrame(animate);
+
+	ctx.fillStyle = "rgb(0, 51, 51)";
+	ctx.fillRect(0, 0, wx, wy);
+
+	if (menu === 2) { ctx.fillStyle = "rgb(0, 10, 10)"; ctx.fillRect(0, wy / 2 + dy_kyoukai, wx, wy); }
+	if (menu === 3) { ctx.fillStyle = "rgb(0, 10, 10)"; ctx.fillRect(0, 0, wx, wy / 2 + dy_kyoukai); }
+
+	ctx.strokeStyle = "rgb(255,255,255)";
+	ctx.lineWidth = 0.5;
+	ctx.beginPath(); ctx.moveTo(wx / 2, 0); ctx.lineTo(wx / 2, wy); ctx.stroke();
+	ctx.beginPath(); ctx.moveTo(0, wy / 2 + dy_kyoukai); ctx.lineTo(wx, wy / 2 + dy_kyoukai); ctx.stroke();
+
+	const LW = 8, LC = "rgb(255,0,0)";
+	if (shinkouLine === 1) {
+		ctx.strokeStyle = LC; ctx.lineWidth = LW;
+		ctx.beginPath();
+		ctx.moveTo(wx / 2, wy / 2 + dy_kyoukai);
+		ctx.lineTo(wx / 2 - (wy / 2 + dy_kyoukai) * tan1, 0);
+		ctx.stroke();
+		ctx.beginPath();
+		if (menu === 1) ctx.moveTo(wx / 2, wy / 2 + dy_kyoukai), ctx.lineTo(wx / 2 + (wy / 2 - dy_kyoukai) * tan1, wy);
+		else            ctx.moveTo(wx / 2, wy / 2 + dy_kyoukai), ctx.lineTo(wx / 2 + (wy / 2 + dy_kyoukai) * tan2, 0);
+		ctx.stroke();
+	}
+
+	if (menu === 1) {
+		for (let i = 0; i < 35; i++) {
+			z1[i] -= v;
+			if (z1[i] < -15 * ramda0) z1[i] = 15 * ramda0 + z1[i] + 15 * ramda0;
+			const x1 = -200 * kx, y1 = z1[i], x2 = 200 * kx, y2 = z1[i];
+			const xx2 = x2 * cos1 - y2 * sin1, yy2 = x2 * sin1 + y2 * cos1;
+			const xx1 = x1 * cos1 - y1 * sin1, yy1 = x1 * sin1 + y1 * cos1;
+			const l = Math.hypot(xx1 - xx2, yy1 - yy2);
+			ctx.fillStyle = "rgb(255,255,255)";
+			fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th1);
+		}
+	} else {
+		for (let i = 0; i < 30; i++) {
+			z1[i] -= v;
+			if (z1[i] < -7 * ramda0) z1[i] = 23 * ramda0 + z1[i] + 7 * ramda0;
+			const x1 = -200 * kx, y1 = z1[i], x2 = 200 * kx, y2 = z1[i];
+			const xx2 = x2 * cos1 - y2 * sin1, yy2 = x2 * sin1 + y2 * cos1;
+			if (yy2 >= 0) {
+				let xx1 = x1 * cos1 - y1 * sin1, yy1 = x1 * sin1 + y1 * cos1;
+				if (yy1 < 0) { xx1 = xx1 - yy1 / tan1; yy1 = 0; }
+				const l = Math.hypot(xx1 - xx2, yy1 - yy2);
+				ctx.fillStyle = "rgb(255,255,255)";
+				fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th1);
+			}
+		}
+		for (let i = 0; i < 33; i++) {
+			z2[i] -= v / n;
+			if (z2[i] < -16 * ramda2) z2[i] = 7 * ramda2 + z2[i] + 16 * ramda2;
+			const x1 = -200 * kx * cos2 / cos1, y1 = z2[i], x2 = 200 * kx * cos2 / cos1, y2 = z2[i];
+			const xx1 = x1 * cos2 - y1 * sin2, yy1 = x1 * sin2 + y1 * cos2;
+			if (yy1 <= 0) {
+				let xx2 = x2 * cos2 - y2 * sin2, yy2 = x2 * sin2 + y2 * cos2;
+				if (yy2 > 0) { xx2 = xx2 - yy2 / tan2; yy2 = 0; }
+				const l = Math.hypot(xx1 - xx2, yy1 - yy2);
+				ctx.fillStyle = menu === 2 ? "rgb(25,25,25)" : "rgb(0,43,43)";
+				fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, th2);
+			}
+		}
+		for (let i = 0; i < 130; i++) {
+			z3[i] += v;
+			if (z3[i] > 23 * ramda0) z3[i] = -7 * ramda0 + z3[i] - 23 * ramda0;
+			const x1 = -200 * kx, y1 = z3[i], x2 = 200 * kx, y2 = z3[i];
+			const xx1 = x1 * cos1 + y1 * sin1, yy1 = -x1 * sin1 + y1 * cos1;
+			if (yy1 >= 0) {
+				let xx2 = x2 * cos1 + y2 * sin1, yy2 = -x2 * sin1 + y2 * cos1;
+				if (yy2 < 0) { xx2 = xx2 + yy2 / tan1; yy2 = 0; }
+				const l = Math.hypot(xx1 - xx2, yy1 - yy2);
+				ctx.fillStyle = "rgb(0,255,0)";
+				fillRect2(wx / 2 + (xx2 + xx1) / 2, wy / 2 - (yy1 + yy2) / 2, l, 5 * kx, -th1);
+			}
+		}
+	}
 }
 
-/* ---------- ボタン ---------- */
-function setEnd(n) { endType = n; markButtons(); }
-function addAngle(d) { angleDeg = Math.max(5, Math.min(80, angleDeg + d)); }
-function toggleRay() { showRay = !showRay; markButtons(); }
-function toggleHuygens() { showHuy = !showHuy; markButtons(); }
-function toggleValues() { showValues = !showValues; markButtons(); }
-function stop() { paused = !paused; }
-function up()   { dt += dt0; if (dt > 0.2) dt = 0.2; }
-function down() { dt -= dt0; if (dt < 0.01) dt = 0.01; }
-function buttonBack() { window.history.back(); }
-
-function markButtons() {
-	document.getElementById("e1").classList.toggle("on", endType === 1);
-	document.getElementById("e2").classList.toggle("on", endType === 2);
-	document.getElementById("tray").classList.toggle("on", showRay);
-	document.getElementById("thuy").classList.toggle("on", showHuy);
-	document.getElementById("tval").classList.toggle("on", showValues);
-}
-
-document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
-document.oncontextmenu = function () { return false; };
-
-resize();
+/* ---------- 開始 ---------- */
+resizeCanvas();
+initParams();
 markButtons();
-animate();
+animId = requestAnimationFrame(animate);
+
+document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+document.oncontextmenu = () => false;
 </script>
 </body>
 </html>
