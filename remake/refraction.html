@@ -166,6 +166,7 @@ const FB = 650;                 // 図の下端（この下はボタン）
 const PI = Math.PI, sin = Math.sin, cos = Math.cos;
 
 const LAM   = 90;               // 媒質1での波長 λ1
+const BW    = 200;              // 波面を描く幅（射線から片側）
 const SPEED = 90;               // 媒質1での速さ（1秒で1波長）
 const RATIOS = { 1: 1.0, 2: 0.7, 3: 1.4 };   // v2 / v1
 
@@ -228,14 +229,16 @@ function sx(x) { return OX + x; }
 function sy(y) { return OY - y; }
 
 /* ============================================================
-   直線を長方形で切り取る（a x + b y = c）
+   波面（山）を描く
    ============================================================ */
-function clipLine(a, b, c, x0, x1, y0, y1) {
-	const n2 = a * a + b * b;
-	const len = Math.sqrt(n2);
-	const px = a * c / n2, py = b * c / n2;
-	const ux = -b / len, uy = a / len;
-	let t0 = -1e6, t1 = 1e6;
+function rangeOf(a, b, x0, x1, y0, y1) {
+	const v = [a * x0 + b * y0, a * x0 + b * y1, a * x1 + b * y0, a * x1 + b * y1];
+	return [Math.min.apply(null, v), Math.max.apply(null, v)];
+}
+
+// 線分（中心 p、向き u、長さ ±hw）を長方形で切り取る
+function clipSeg(px, py, ux, uy, hw, x0, x1, y0, y1) {
+	let t0 = -hw, t1 = hw;
 	const P = [-ux, ux, -uy, uy];
 	const Q = [px - x0, x1 - px, py - y0, y1 - py];
 	for (let i = 0; i < 4; i++) {
@@ -251,22 +254,21 @@ function clipLine(a, b, c, x0, x1, y0, y1) {
 	return [px + t0 * ux, py + t0 * uy, px + t1 * ux, py + t1 * uy];
 }
 
-function rangeOf(a, b, x0, x1, y0, y1) {
-	const v = [a * x0 + b * y0, a * x0 + b * y1, a * x1 + b * y0, a * x1 + b * y1];
-	return [Math.min.apply(null, v), Math.max.apply(null, v)];
-}
-
-// 位相 a x + b y = s − kλ1 の山を、領域の中に描く
-function drawCrests(a, b, s, x0, x1, y0, y1, col, wid) {
+// 位相 a x + b y = s − kλ1 の山を、O を通る射線のまわり（幅 ±hw）だけ描く
+// （参照サイトと同じく、波面の一部＝帯状のビームとして見せる）
+function drawCrests(a, b, s, hw, x0, x1, y0, y1, col, wid) {
 	const mm = rangeOf(a, b, x0, x1, y0, y1);
+	const g2 = a * a + b * b, gl = Math.sqrt(g2);
+	const ux = -b / gl, uy = a / gl;          // 波面の向き
 	let c = s;
 	if (c > mm[1]) c -= Math.floor((c - mm[1]) / LAM) * LAM;
 	ctx.strokeStyle = col;
 	ctx.lineWidth = wid;
-	ctx.lineCap = "round";
+	ctx.lineCap = "butt";
 	ctx.beginPath();
 	for (; c >= mm[0]; c -= LAM) {
-		const seg = clipLine(a, b, c, x0, x1, y0, y1);
+		// 射線（勾配の向き）上にある波面の中心
+		const seg = clipSeg(a * c / g2, b * c / g2, ux, uy, hw, x0, x1, y0, y1);
 		if (!seg) continue;
 		ctx.moveTo(sx(seg[0]), sy(seg[1]));
 		ctx.lineTo(sx(seg[2]), sy(seg[3]));
@@ -392,15 +394,16 @@ function drawWaves(g) {
 	const x0 = -OX, x1 = VWv - OX;
 	const yTop = OY, yBot = OY - FB;
 
-	// 波の先頭が左上の画面外から入ってくるように、始まりの位相を決める
-	const s0 = rangeOf(g.s1, -g.c1, x0, x1, 0, yTop)[0] - 4;
+	// 波の先頭が画面の外から入ってくるように、始まりの位相を決める
+	const s0 = -Math.min(yTop / g.c1, OX / g.s1) - BW;
 	const s = s0 + D;
 
-	drawCrests(g.s1, -g.c1, s, x0, x1, 0, yTop, BLUE, 4);
+	// 屈折波の帯の幅は、境界上で入射波の帯と同じ範囲に当たるように cosθ2/cosθ1 倍
+	drawCrests(g.s1, -g.c1, s, BW, x0, x1, 0, yTop, BLUE, 5);
 	if (g.tir) {
-		drawCrests(g.s1, g.c1, s, x0, x1, 0, yTop, RED, 4);
+		drawCrests(g.s1, g.c1, s, BW, x0, x1, 0, yTop, RED, 5);
 	} else {
-		drawCrests(g.s1, -g.c2 / g.q, s, x0, x1, yBot, 0, GREEN, 4);
+		drawCrests(g.s1, -g.c2 / g.q, s, BW * g.c2 / g.c1, x0, x1, yBot, 0, GREEN, 5);
 	}
 
 	if (showRay) drawRays(g);
