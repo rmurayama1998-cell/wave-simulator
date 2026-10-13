@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>うなり</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+	touch-action: none;
+}
+
+#info, #info2 {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	color: #4a4038;
+}
+#info  { bottom: 9vh; }
+#info2 { bottom: 2vh; }
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+
+/* 実行ボタン */
+button.go {
+	background: #0f7a3d;
+	color: #ffffff;
+	box-shadow: 0 3px 10px rgba(15, 122, 61, 0.32);
+	min-width: 6.2em;
+}
+button.go:hover { background: #128a45; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info">
+	<span class="grp">
+		<button onclick="addF(1, -1)">f₁ −</button>
+		<button onclick="addF(1, 1)">f₁ ＋</button>
+	</span>
+	<span class="grp">
+		<button onclick="addF(2, -1)">f₂ −</button>
+		<button onclick="addF(2, 1)">f₂ ＋</button>
+	</span>
+	<span class="grp">
+		<button id="bEnv" onclick="toggleEnv()">音の大きさの変化</button>
+		<button id="bCount" onclick="toggleCount()">周期 T の間の波を数える</button>
+	</span>
+</div>
+
+<div id="info2">
+	<button id="bPlay" class="go" onclick="togglePlay()">スタート</button>
+	<button onclick="restart()">最初から</button>
+	<span class="grp">
+		<button id="sp1" onclick="setSpeed(1)">実際の速さ</button>
+		<button id="sp4" onclick="setSpeed(0.25)">ゆっくり（1/4）</button>
+	</span>
+	<button id="bSound" onclick="toggleSound()">🔈 音を鳴らす</button>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   うなり
+   上から 音源Aの波・音源Bの波・2つを重ねた合成波 を y-t グラフで並べ、
+   「今」の線を左から右へ動かす。
+   うなりの周期 T の間に A は f₁T 個、B は f₂T 個の波を出し、
+   その差がちょうど1個になる（＝山と山が再びそろう）ことを数えて確かめる。
+   仮想座標系 1366 x 768 を画面に収めて描画する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;      // 仮想画面サイズ
+let k = 1, offX = 0, offY = 0;  // 仮想 -> 実ピクセル
+
+const PI = Math.PI;
+
+/* ---------- 配置（仮想座標） ---------- */
+const GX0 = 190, GX1 = 1310;    // グラフの横の範囲（t = 0 〜 TW）
+const TW  = 3;                  // グラフに入れる時間 [s]
+const YA  = 106, AMPA = 40;     // 波A の中心と振幅
+const YB  = 224, AMPB = 40;     // 波B
+const YS  = 374, AMPS = 80;     // 合成波（振幅は最大で A＋B）
+const PANEL = [516, 690];       // ここまでが図。下はボタンの場所
+const CONTENT_H = 700;          // 図の高さ（仮想単位）       // 下の説明パネル（y の範囲）
+
+const BG    = "#faf4ee";
+const INK   = "#1a1a1a";
+const SUB   = "#5c5348";
+const GRID  = "#d6cbbd";
+const RED   = "#d81b2c";        // 波A
+const BLUE  = "#1d5fd6";        // 波B
+const GREEN = "#0a8f3c";        // 合成波
+const FONT  = "'Meiryo', 'Hiragino Kaku Gothic ProN', sans-serif";
+const MATH  = "'Times New Roman', Georgia, serif";
+
+/* ---------- 振動数 ---------- */
+// 本物の音は数百 Hz だが、それでは図の波が細かすぎて見えないので、
+// 図の上では 5〜15 Hz の整数にしておく（うなりの考え方は同じ）
+const F_MIN = 5, F_MAX = 15;
+let f1 = 10, f2 = 8;
+// 音は2つとも BASE だけ高くして鳴らす。差 f₁−f₂ は変わらないので、
+// 聞こえるうなりの回数は図と同じになる
+const BASE = 440;
+
+/* ---------- 状態 ---------- */
+let t = 0;                      // いまの時刻 [s]（0 〜 TW をくり返す）
+let playing = false;
+let speed = 1;                  // 1：実際の速さ / 0.25：ゆっくり
+let showEnv = true;             // 音の大きさの変化（包絡線と 大・小 の目印）
+let showCount = false;          // 周期 T の間の波を数える
+let lastNow = 0;
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	// 下の約17%はボタン2段のために空けておく
+	k = Math.min(cv.width / VW, cv.height * 0.83 / CONTENT_H);
+	offX = (cv.width - VW * k) / 2;
+	offY = Math.max(0, (cv.height * 0.83 - CONTENT_H * k) / 2);
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   計算
+   ============================================================ */
+function px(tt) { return GX0 + (GX1 - GX0) * tt / TW; }
+function tOf(vx) { return (vx - GX0) / (GX1 - GX0) * TW; }
+function df() { return Math.abs(f1 - f2); }
+function beatT() { return df() === 0 ? Infinity : 1 / df(); }
+// t = 0 で山と山がそろうように cos を使う
+function yA(tt) { return Math.cos(2 * PI * f1 * tt); }
+function yB(tt) { return Math.cos(2 * PI * f2 * tt); }
+// 合成波の振幅（＝音の大きさ）。0 〜 2
+function envelope(tt) { return 2 * Math.abs(Math.cos(PI * (f1 - f2) * tt)); }
+
+/* ============================================================
+   描画の小道具（すべて仮想座標）
+   ============================================================ */
+function line(x1, y1, x2, y2, w, col, dash) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = w;
+	if (dash) ctx.setLineDash(dash);
+	ctx.beginPath();
+	ctx.moveTo(x1, y1);
+	ctx.lineTo(x2, y2);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function text(str, x, y, size, col, align, bold, font) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.font = (bold ? "bold " : "") + size + "px " + (font || FONT);
+	ctx.textAlign = align || "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(str, x, y);
+	ctx.restore();
+}
+
+function arrowRight(x, y) {
+	ctx.fillStyle = INK;
+	ctx.beginPath();
+	ctx.moveTo(x + 12, y);
+	ctx.lineTo(x - 6, y - 8);
+	ctx.lineTo(x - 6, y + 8);
+	ctx.closePath();
+	ctx.fill();
+}
+
+function ball(x, y, col) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.strokeStyle = "#ffffff";
+	ctx.lineWidth = 2.5;
+	ctx.beginPath();
+	ctx.arc(x, y, 9, 0, 2 * PI);
+	ctx.fill();
+	ctx.stroke();
+	ctx.restore();
+}
+
+function roundRect(x, y, w, h, r, fill, stroke) {
+	ctx.save();
+	ctx.beginPath();
+	ctx.moveTo(x + r, y);
+	ctx.arcTo(x + w, y, x + w, y + h, r);
+	ctx.arcTo(x + w, y + h, x, y + h, r);
+	ctx.arcTo(x, y + h, x, y, r);
+	ctx.arcTo(x, y, x + w, y, r);
+	ctx.closePath();
+	if (fill)   { ctx.fillStyle = fill; ctx.fill(); }
+	if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+	ctx.restore();
+}
+
+// 関数 fn(t) を中心 yc・振幅 amp の y-t グラフとして描く
+function curve(fn, yc, amp, col, w) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = w;
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	for (let x = GX0; x <= GX1; x += 1) {
+		const y = yc - amp * fn(tOf(x));
+		if (x === GX0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+// t 軸
+function axis(yc, amp) {
+	line(GX0, yc - amp - 14, GX0, yc + amp + 14, 1.5, INK);
+	line(GX0, yc, GX1 + 14, yc, 1.5, INK);
+	arrowRight(GX1 + 20, yc);
+	ctx.save();
+	ctx.fillStyle = INK;
+	ctx.font = "italic 28px " + MATH;
+	ctx.textAlign = "center";
+	ctx.textBaseline = "middle";
+	ctx.fillText("t", GX1 + 38, yc + 2);
+	ctx.restore();
+	text("O", GX0 - 14, yc + 16, 20, INK, "center", false, MATH);
+}
+
+/* ============================================================
+   背景（グラフの枠・目盛り）
+   ============================================================ */
+function drawStage() {
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(k, 0, 0, k, offX, offY);
+
+	// 0.5 s ごとの目盛り
+	for (let s = 0.5; s <= TW + 1e-9; s += 0.5) {
+		const x = px(s);
+		line(x, YA - AMPA - 12, x, YS + AMPS + 12, 1, GRID);
+		text(s.toFixed(1) + " s", x, YS + AMPS + 26, 15, SUB, "center");
+	}
+	// 合成波の振幅の目安（A＋B の最大）
+	line(GX0, YS - AMPS, GX1, YS - AMPS, 1, GRID, [4, 5]);
+	line(GX0, YS + AMPS, GX1, YS + AMPS, 1, GRID, [4, 5]);
+
+	axis(YA, AMPA);
+	axis(YB, AMPB);
+	axis(YS, AMPS);
+
+	// 左の見出し
+	text("音源A の音", 22, YA - 14, 22, RED, "left", true);
+	text("f₁ = " + f1 + " Hz", 22, YA + 16, 22, RED, "left", false);
+	text("音源B の音", 22, YB - 14, 22, BLUE, "left", true);
+	text("f₂ = " + f2 + " Hz", 22, YB + 16, 22, BLUE, "left", false);
+	text("聞こえる音", 22, YS - 28, 22, GREEN, "left", true);
+	text("（A＋B）", 22, YS + 2, 20, GREEN, "left", false);
+	text("合成波", 22, YS + 30, 20, GREEN, "left", false);
+}
+
+/* ============================================================
+   うなりの周期 T の間の波を数える
+   ============================================================ */
+function drawCount() {
+	const T = beatT();
+	if (!isFinite(T)) return;
+	const xr = px(Math.min(T, TW));
+
+	// 周期 T の範囲を薄く塗る
+	ctx.save();
+	ctx.fillStyle = "rgba(255, 196, 0, 0.16)";
+	ctx.fillRect(GX0, YA - AMPA - 24, xr - GX0, YS + AMPS + 12 - (YA - AMPA - 24));
+	ctx.restore();
+	line(xr, YA - AMPA - 24, xr, YS + AMPS + 12, 2, "#c98a00", [7, 5]);
+
+	// 1個ずつの波に番号をふる（その波のまん中の上に）
+	function number(f, yc, amp, col) {
+		const n = Math.floor(f * T + 1e-9);
+		for (let i = 1; i <= n; i++) {
+			const x = px((i - 0.5) / f);
+			text(String(i), x, yc - amp - 13, 17, col, "center", true);
+		}
+		return f * T;
+	}
+	const nA = number(f1, YA, AMPA, RED);
+	const nB = number(f2, YB, AMPB, BLUE);
+
+	// 下のかっこ
+	const yb = YS + AMPS + 46;   // 時刻の目盛りの数字の下
+	line(GX0, yb, xr, yb, 2, "#c98a00");
+	line(GX0, yb - 8, GX0, yb + 2, 2, "#c98a00");
+	line(xr, yb - 8, xr, yb + 2, 2, "#c98a00");
+	const fmt = function (v) { return Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(2); };
+	text("うなりの周期 T = " + T.toFixed(2) + " s　→　A は f₁T = " + fmt(nA) + " 個，B は f₂T = " + fmt(nB) +
+	     " 個，差はちょうど 1 個", xr + 14, yb - 3, 19, "#8a5a00", "left", true);
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	drawStage();
+
+	const T = beatT();
+
+	if (showCount) drawCount();
+
+	// 強め合う（山と山がそろう）時刻・弱め合う（山と谷が重なる）時刻
+	if (showEnv && isFinite(T) && df() <= 4) {
+		for (let n = 0; n * T / 2 <= TW + 1e-9; n++) {
+			const tt = n * T / 2;
+			const x = px(tt);
+			const strong = (n % 2 === 0);
+			line(x, YA - AMPA - 4, x, YS + AMPS, 1.2, strong ? "#e07a00" : "#7a8fb0", [3, 4]);
+			text(strong ? "大" : "小", x, YS - AMPS - 16, 18, strong ? "#e07a00" : "#5a6f95", "center", true);
+		}
+	}
+
+	// 合成波の包絡線（音の大きさの変化）
+	if (showEnv) {
+		ctx.save();
+		ctx.globalAlpha = 0.9;
+		curve(function (tt) { return envelope(tt) / 2; }, YS, AMPS, "#9a9a9a", 2);
+		curve(function (tt) { return -envelope(tt) / 2; }, YS, AMPS, "#9a9a9a", 2);
+		ctx.restore();
+	}
+
+	curve(yA, YA, AMPA, RED, 2.4);
+	curve(yB, YB, AMPB, BLUE, 2.4);
+	curve(function (tt) { return (yA(tt) + yB(tt)) / 2; }, YS, AMPS, GREEN, 2.4);
+
+	// 「今」の線と玉
+	const xc = px(t);
+	line(xc, YA - AMPA - 26, xc, YS + AMPS + 14, 2.5, "rgba(26,26,26,0.55)");
+	text("今", xc, YA - AMPA - 38, 17, INK, "center", true);
+	ball(xc, YA - AMPA * yA(t), RED);
+	ball(xc, YB - AMPB * yB(t), BLUE);
+	ball(xc, YS - AMPS * (yA(t) + yB(t)) / 2, GREEN);
+
+	drawPanel();
+}
+
+/* ============================================================
+   下の説明パネル：出した波の数と、その差
+   ============================================================ */
+function drawPanel() {
+	const y0 = PANEL[0], y1 = PANEL[1];
+	roundRect(22, y0, VW - 44, y1 - y0, 12, "#fffdfa", "#d9cec1");
+
+	const nA = f1 * t, nB = f2 * t, d = (f1 - f2) * t;
+	const L = 48;
+	text("時刻 t = " + t.toFixed(2) + " s までに出した波の数", L, y0 + 24, 19, SUB, "left", true);
+	text("A：f₁t = " + nA.toFixed(2) + " 個", L, y0 + 58, 23, RED, "left", true);
+	text("B：f₂t = " + nB.toFixed(2) + " 個", L, y0 + 92, 23, BLUE, "left", true);
+	text("差：|f₁ − f₂|t = " + Math.abs(d).toFixed(2) + " 個", L, y0 + 130, 23, INK, "left", true);
+
+	// 右側：差の数直線。整数のとき山と山がそろう（大），半整数のとき山と谷（小）
+	const NX0 = 470, NX1 = 1050, ny = y0 + 70;
+	const dmax = df() * TW;
+	if (dmax === 0) {
+		text("f₁ ＝ f₂ なので，2つの波はずっと山と山がそろったまま。", NX0, ny - 18, 21, INK, "left", true);
+		text("→ 音の大きさは変わらない（うなりは起こらない）", NX0, ny + 18, 21, INK, "left", true);
+	} else {
+		text("波の数の差", NX0, y0 + 24, 17, SUB, "left", true);
+		line(NX0, ny, NX1, ny, 2, INK);
+		const nx = function (v) { return NX0 + (NX1 - NX0) * v / dmax; };
+		const step = dmax <= 8 ? 0.5 : (dmax <= 16 ? 1 : 3);
+		for (let v = 0; v <= dmax + 1e-9; v += step) {
+			const x = nx(v);
+			const whole = Math.abs(v - Math.round(v)) < 1e-9;
+			line(x, ny - (whole ? 9 : 6), x, ny + (whole ? 9 : 6), 2, INK);
+			if (whole) text(String(Math.round(v)), x, ny + 24, 17, INK, "center");
+			if (dmax <= 8) {
+				text(whole ? "大" : "小", x, ny - 22, 15, whole ? "#e07a00" : "#5a6f95", "center", true);
+			}
+		}
+		// いまの差
+		const xd = nx(Math.abs(d));
+		ctx.save();
+		ctx.fillStyle = INK;
+		ctx.beginPath();
+		ctx.moveTo(xd, ny + 2);
+		ctx.lineTo(xd - 9, ny + 16);
+		ctx.lineTo(xd + 9, ny + 16);
+		ctx.closePath();
+		ctx.fill();
+		ctx.restore();
+		text("差が 0, 1, 2, … 個（整数）　　 → 山と山がそろう → 大きい音", NX0, y0 + 122, 17, "#b86200", "left", true);
+		text("差が 0.5, 1.5, … 個（半整数）→ 山と谷が重なる → 小さい音", NX0, y0 + 150, 17, "#3f5a8a", "left", true);
+	}
+
+	// いちばん右：音の大きさのメーター
+	const MX = 1100, MW = 220, my = y0 + 34;
+	text("いまの音の大きさ", MX, my - 6, 17, SUB, "left", true);
+	const e = envelope(t) / 2;     // 0 〜 1
+	roundRect(MX, my + 12, MW, 26, 8, "#efe7dc");
+	if (e > 0.005) roundRect(MX, my + 12, MW * e, 26, 8, GREEN);
+	text(e > 0.75 ? "大きい" : (e < 0.25 ? "小さい" : ""), MX + MW / 2, my + 58, 20, INK, "center", true);
+	text("※音は2つとも 440 Hz 高く", MX, my + 96, 14, SUB, "left");
+	text("　して鳴らします（差は同じ）", MX, my + 116, 14, SUB, "left");
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function animate(now) {
+	const dtReal = lastNow ? Math.min((now - lastNow) / 1000, 0.1) : 0;
+	lastNow = now;
+	if (playing) {
+		if (soundOn && actx && audioStartAt !== null) {
+			// 音を鳴らしているときは、音の時計に合わせて進める（見た目と音をずらさない）
+			const lat = (actx.outputLatency || 0) + (actx.baseLatency || 0);
+			const el = Math.max(0, actx.currentTime - lat - audioStartAt);
+			t = wrap(audioT0 + speed * el);
+		} else {
+			t = wrap(t + speed * dtReal);
+		}
+	}
+	draw();
+	requestAnimationFrame(animate);
+}
+// f₁・f₂・TW がすべて整数なので、TW ごとに最初とまったく同じ状態にもどる
+function wrap(v) { return ((v % TW) + TW) % TW; }
+
+/* ============================================================
+   音（Web Audio）
+   ============================================================ */
+let actx = null, soundOn = false;
+let voice = null;               // { oscA, oscB, gain }
+let audioStartAt = null, audioT0 = 0;
+
+// 位相 φ つきの正弦波：sin(ωt＋φ) ＝ sinφ·cos ωt ＋ cosφ·sin ωt
+function phasedOsc(freq, phase) {
+	const o = actx.createOscillator();
+	const real = new Float32Array([0, Math.sin(phase)]);
+	const imag = new Float32Array([0, Math.cos(phase)]);
+	o.setPeriodicWave(actx.createPeriodicWave(real, imag, { disableNormalization: true }));
+	o.frequency.value = freq;
+	return o;
+}
+
+function stopVoice() {
+	if (!voice) return;
+	const v = voice;
+	voice = null;
+	audioStartAt = null;
+	try {
+		const now = actx.currentTime;
+		v.gain.gain.cancelScheduledValues(now);
+		v.gain.gain.setValueAtTime(v.gain.gain.value, now);
+		v.gain.gain.linearRampToValueAtTime(0, now + 0.04);
+		v.oscA.stop(now + 0.06);
+		v.oscB.stop(now + 0.06);
+	} catch (e) {}
+}
+
+// いまの時刻 t から、図と同じずれ（位相差）で2つの音を鳴らし始める
+function startVoice() {
+	stopVoice();
+	if (!actx || !soundOn || !playing) return;
+	try {
+		const at = actx.currentTime + 0.03;
+		const g = actx.createGain();
+		g.gain.setValueAtTime(0, at);
+		g.gain.linearRampToValueAtTime(0.22, at + 0.04);
+		g.connect(actx.destination);
+		const oscA = phasedOsc(BASE + f1 * speed, 2 * PI * f1 * t + PI / 2);
+		const oscB = phasedOsc(BASE + f2 * speed, 2 * PI * f2 * t + PI / 2);
+		oscA.connect(g);
+		oscB.connect(g);
+		oscA.start(at);
+		oscB.start(at);
+		voice = { oscA: oscA, oscB: oscB, gain: g };
+		audioStartAt = at;
+		audioT0 = t;
+	} catch (e) {}
+}
+
+function toggleSound() {
+	soundOn = !soundOn;
+	if (soundOn) {
+		try {
+			if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+			if (actx.state === "suspended") actx.resume();
+		} catch (e) { soundOn = false; }
+		if (!playing) togglePlay(); else startVoice();
+	} else {
+		stopVoice();
+	}
+	markButtons();
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function togglePlay() {
+	playing = !playing;
+	if (playing) startVoice(); else stopVoice();
+	markButtons();
+}
+
+function restart() {
+	t = 0;
+	if (playing) startVoice();
+	draw();
+}
+
+function addF(which, d) {
+	if (which === 1) f1 = Math.min(F_MAX, Math.max(F_MIN, f1 + d));
+	else             f2 = Math.min(F_MAX, Math.max(F_MIN, f2 + d));
+	t = 0;
+	if (playing) startVoice();
+	draw();
+}
+
+function setSpeed(s) {
+	speed = s;
+	if (playing) startVoice();
+	markButtons();
+}
+
+function toggleEnv()   { showEnv = !showEnv; markButtons(); draw(); }
+function toggleCount() { showCount = !showCount; markButtons(); draw(); }
+
+function buttonBack() { window.history.back(); }
+
+function markButtons() {
+	document.getElementById("bPlay").textContent = playing ? "停止" : "スタート";
+	document.getElementById("sp1").classList.toggle("on", speed === 1);
+	document.getElementById("sp4").classList.toggle("on", speed !== 1);
+	document.getElementById("bEnv").classList.toggle("on", showEnv);
+	document.getElementById("bCount").classList.toggle("on", showCount);
+	const bs = document.getElementById("bSound");
+	bs.classList.toggle("on", soundOn);
+	bs.textContent = soundOn ? "🔊 音を止める" : "🔈 音を鳴らす";
+}
+
+/* ---------- グラフをなぞって「今」を動かす ---------- */
+let dragging = false;
+function toVirtual(e) {
+	const r = cv.getBoundingClientRect();
+	const sx = cv.width / r.width, sy = cv.height / r.height;
+	return { x: ((e.clientX - r.left) * sx - offX) / k, y: ((e.clientY - r.top) * sy - offY) / k };
+}
+function scrubTo(e) {
+	const p = toVirtual(e);
+	t = Math.min(TW, Math.max(0, tOf(p.x)));
+	if (t >= TW) t = TW - 1e-6;
+	draw();
+}
+cv.addEventListener("pointerdown", function (e) {
+	const p = toVirtual(e);
+	if (p.x < GX0 - 20 || p.x > GX1 + 20 || p.y > YS + AMPS + 40) return;
+	dragging = true;
+	if (playing) { playing = false; stopVoice(); markButtons(); }
+	try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+	scrubTo(e);
+});
+cv.addEventListener("pointermove", function (e) { if (dragging) scrubTo(e); });
+cv.addEventListener("pointerup",     function () { dragging = false; });
+cv.addEventListener("pointercancel", function () { dragging = false; });
+
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+markButtons();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
