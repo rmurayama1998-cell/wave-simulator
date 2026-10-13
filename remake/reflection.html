@@ -161,8 +161,10 @@ const tt    = 10;               // 周期 T
 const dxs   = 2;                // 球の間隔
 const dt0   = dxs * tt / ramda; // 1コマで dxs だけ波が進む時間
 const dtDef = dt0 * 2;          // ふだんの描画速度（1コマで dxs の2倍進む）
+const dtPulse = dt0 * 4;        // パルス波のふだんの描画速度（授業で待たないよう速め）
 const dtStep = dt0 / 4;         // 「描画↑↓」1回で変わる量
 const TRAIN = 2 * ramda;        // 「正弦波」で送り出す波列の長さ
+const PULSE_DIST = ramda;       // パルス波を送り出す位置から端までの距離
 
 const BG    = "#faf4ee";        // 背景（生成り色）
 const AXIS  = "#000000";        // 座標軸
@@ -303,20 +305,26 @@ function sphere(vx, vy, diaPx, kind) {
 /* ============================================================
    波の変位
    ============================================================ */
+// 波を送り出す位置。パルス波は端の手前 PULSE_DIST から、ほかは左端から
+function startX() {
+	return (menu === 1) ? Math.max(0, wallX - PULSE_DIST) : 0;
+}
+
 // 右へ進む正弦波そのもの（先頭のすぐ後ろが山になる向きに取る）
 function wf(xx) {
-	return AMP * sin(2 * PI * (t / tt - xx / ramda));
+	return AMP * sin(2 * PI * (t / tt - (xx - startX()) / ramda));
 }
 
 // 入射波。まだ波が届いていない所と、通り過ぎてしまった所は null。
 // 端の右側でも「そのまま進んだと考えた波」として値を返す（折り返しのもと）
 function dispIn(xx) {
 	if (menu === 4) return wf(xx);            // 定常波は最初からできあがっている
-	const front = ramda / tt * t;             // 波の先頭
+	const start = startX();
+	const front = start + ramda / tt * t;     // 波の先頭
 	const tail  = (menu === 1) ? front - ramda / 2
 	            : (menu === 2) ? front - TRAIN
 	            : -1e9;                       // 連続波は後ろがずっと続く
-	if (xx >= front || xx <= tail) return null;
+	if (xx >= front || xx <= tail || xx < start) return null;
 	return wf(xx);
 }
 
@@ -448,9 +456,10 @@ function draw() {
 function update() {
 	if (wait > 0) { wait--; return; }
 
-	// 反射した波が左端から出ていったら、はじめから
+	// 反射した波が出ていったら、はじめから
+	// （パルス波は、送り出した位置まで戻りきったところで）
 	const front = ramda / tt * t;
-	if (menu === 1 && front > 2 * wallX + ramda / 2 + 40) { t = 0; wait = 45; return; }
+	if (menu === 1 && front > 2 * (wallX - startX()) + ramda / 2 + 40) { t = 0; wait = 45; return; }
 	if (menu === 2 && front > 2 * wallX + TRAIN     + 40) { t = 0; wait = 45; return; }
 
 	t += dt;
@@ -465,7 +474,7 @@ function animate() {
 /* ============================================================
    ボタン
    ============================================================ */
-function init() { t = 0; dt = dtDef; wait = 45; markButtons(); draw(); }
+function init() { t = 0; dt = (menu === 1) ? dtPulse : dtDef; wait = 45; markButtons(); draw(); }
 
 function setHansha(n) { hansha = n; init(); }
 function setMenu(n)   { menu = n; init(); }
