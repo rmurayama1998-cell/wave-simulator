@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>弦の固有振動（基本・2倍・3倍振動の重ね合わせ）</title>
+<title>弦の固有振動（定常波になる波・ならない波）</title>
 <style>
 * {
 	-moz-user-select: none;
@@ -94,6 +94,13 @@ button.on:hover { background: #4a4038; }
 
 <canvas id="myCanvas"></canvas>
 
+<div id="info">
+	<span class="grp">
+		<button id="k1" onclick="setKind(1)">固有振動の波（定常波になる）</button>
+		<button id="k2" onclick="setKind(2)">固有振動でない波（定常波にならない）</button>
+	</span>
+</div>
+
 <div id="info2">
 	<span class="grp">
 		<button onclick="stop()">停止／再開</button>
@@ -108,11 +115,15 @@ button.on:hover { background: #4a4038; }
 "use strict";
 
 /* ============================================================
-   弦の固有振動（基本・2倍・3倍振動の重ね合わせ）
-   上に「すべての固有振動が重なった弦の振動」、
-   下に基本振動・2倍振動・3倍振動を縦に並べる。
+   弦の固有振動（定常波になる波・ならない波）
+   上に「3つの波が重なった弦の振動」、下にその3つの波を縦に並べる。
    上下とも同じ横幅・同じ振幅の倍率で描くので、下の3つを足すと上になる。
-     n 倍振動 … y = sin(nπx) cos(nπt)   （x は弦の左端 0 〜 右端 1）
+   ・固有振動の波 … n 倍振動 y = sin(nπx) cos(nπt)   （x は弦の左端 0 〜 右端 1）
+   ・固有振動でない波（L = m × λ/2、m が整数でない）
+       … 弦の上を往復する波を、1往復ぶんずつ全部重ね合わせる。
+         往復のたびに位相がずれるので打ち消し合い、0 に近づく。
+         往復した波の和は等比数列の和の公式で計算する。
+         縦は「1本の振幅 × 2 × 往復回数」で割って、全部強め合ったときを 1 とする
    仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
    ============================================================ */
 
@@ -129,6 +140,10 @@ let VWv = VW;
 const PI = Math.PI, sin = Math.sin, cos = Math.cos;
 
 const MODES = [1, 2, 3];        // 並べる固有振動
+const NONM  = [1.3, 1.7, 2.4];  // 固有振動でない波（L = m × λ/2）
+const RMAX  = 40;               // 往復回数の上限
+const TRT   = 2;                // 1往復にかかる時間（弦の長さ L = 1、波の速さ 1）
+const SHOWN_COPIES = 5;         // 細線で描く往復の数（最新のものから）
 
 /* ---------- 色 ---------- */
 const BG    = "#faf4ee";
@@ -139,8 +154,10 @@ const SUB   = "#7a6e62";
 const EIG   = "#0060d0";        // 1つずつの固有振動（青）
 const GREEN = "#00a000";        // 重なった弦の振動（緑）
 const NODE  = "#2a2ad0";        // 節の点
+const NON   = "#e07000";        // 固有振動でない波（オレンジ）
 
 /* ---------- 状態 ---------- */
+let kind = 1;                   // 1:固有振動の波 2:固有振動でない波
 let t = 0;
 const spdDef = 1;
 let spd = spdDef;
@@ -175,6 +192,32 @@ function total(x) {
 	return s;
 }
 
+const R = function () { return Math.min(RMAX, 1 + Math.floor(t / TRT)); };
+
+// j 往復目の右へ進む波と、それが右端で反射した左へ進む波（固定端で上下反転）
+function right(m, j, x) { return sin(PI * m * x - PI * m * t + j * 2 * PI * m); }
+function left(m, j, x)  { return -sin(PI * m * (2 - x) - PI * m * t + j * 2 * PI * m); }
+
+// sin(a) + sin(a+φ) + … + sin(a+(r-1)φ)  （等比数列の和）
+function sinSum(a, phi, r) {
+	const s = sin(phi / 2);
+	if (Math.abs(s) < 1e-9) return r * sin(a);
+	return sin(a + (r - 1) * phi / 2) * sin(r * phi / 2) / s;
+}
+
+// r 往復ぶんの波をすべて重ね合わせ、往復回数×2 で割った変位
+function nonResult(m, x) {
+	const r = R(), phi = 2 * PI * m;
+	return (sinSum(PI * m * x - PI * m * t, phi, r)
+	      - sinSum(PI * m * (2 - x) - PI * m * t, phi, r)) / (2 * r);
+}
+
+function nonTotal(x) {
+	let s = 0;
+	for (const m of NONM) s += nonResult(m, x);
+	return s;
+}
+
 /* ============================================================
    描画のための小道具（仮想座標で受け取る）
    ============================================================ */
@@ -201,8 +244,9 @@ function text(s, x, y, size, col, align, bold) {
 }
 
 // 関数 f(x) (x: 0〜1) を、左端 X0・右端 X1・中心線 CY・倍率 A で描く
-function curve(f, X0, X1, CY, A, wid, col) {
+function curve(f, X0, X1, CY, A, wid, col, alpha) {
 	ctx.save();
+	ctx.globalAlpha = (alpha === undefined) ? 1 : alpha;
 	ctx.strokeStyle = col;
 	ctx.lineWidth = wid * k;
 	ctx.lineCap = "round";
@@ -255,11 +299,14 @@ function draw() {
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
 
 	const X0 = 330, X1 = VWv - 70;
-	const A = 44;                       // 1つの固有振動の振幅（重なると最大 3 倍）
+	const A = 42;                       // 1つの波の振幅（重なると最大 3 倍）
 	const FS = 30;                      // 左の文字の大きさ
+	const eig = (kind === 1);
+	const COL = eig ? EIG : NON;
 
-	text("━ すべてが重なった弦の振動", 30, -24, 18, GREEN, "left", true);
-	text("━ 固有振動（1つずつ）", 320, -24, 18, EIG, "left", true);
+	text("━ 3つの波が重なった弦の振動", 30, -24, 18, GREEN, "left", true);
+	text(eig ? "━ 固有振動（1つずつ）" : "━ 固有振動でない波（1つずつ）", 330, -24, 18, COL, "left", true);
+	if (!eig) text("往復回数  " + R() + " 回" + (R() === RMAX ? "（上限）" : ""), X1, -24, 22, TEXT, "right", true);
 
 	// 弦の長さ L（寸法線）
 	const DY = 14;
@@ -273,31 +320,50 @@ function draw() {
 	ctx.restore();
 	text("弦の長さ L", mid, DY, 26, TEXT, "center", true);
 
-	// 上：すべての固有振動が重なった弦の振動
-	const CY0 = 178, half0 = 140;
-	text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
-	text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
-	text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
+	// 上：3つの波が重なった弦の振動
+	const CY0 = 172, half0 = 132;
+	if (eig) {
+		text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
+		text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
+		text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
+	} else {
+		text("固有振動で", 30, CY0 - 52, FS, TEXT, "left", true);
+		text("ない波が", 30, CY0 - 14, FS, TEXT, "left", true);
+		text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
+	}
 	text("（下の3つの和）", 30, CY0 + 62, 22, GREEN, "left", true);
 	line(X0, CY0, X1, CY0, 1.5, GRID, [6, 6]);
 	wall(X0, CY0 - half0, CY0 + half0, -1);
 	wall(X1, CY0 - half0, CY0 + half0, 1);
-	curve(total, X0, X1, CY0, A, 7, GREEN);
-	line(30, 332, VWv - 30, 332, 1.5, "#d9cec1");
+	curve(eig ? total : nonTotal, X0, X1, CY0, A, 7, GREEN);
+	line(30, 318, VWv - 30, 318, 1.5, "#d9cec1");
 
-	// 下：基本振動・2倍振動・3倍振動
-	const laneTop = 340, laneH = 122;
-	MODES.forEach(function (n, i) {
+	// 下：3つの波を1つずつ
+	const laneTop = 326, laneH = 112;
+	const list = eig ? MODES : NONM;
+	list.forEach(function (m, i) {
 		const CY = laneTop + laneH * (i + 0.5);
-		const h = laneH * 0.42;
+		const h = laneH * 0.44;
 		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
 		line(X0, CY, X1, CY, 1, GRID, [5, 5]);
 		line(X0, CY - h, X0, CY + h, 4, WALLC);
 		line(X1, CY - h, X1, CY + h, 4, WALLC);
-		curve(function (x) { return mode(n, x); }, X0, X1, CY, A, 4.5, EIG);
-		for (let j = 0; j <= n; j++) dot(X0 + (X1 - X0) * j / n, CY, NODE);
-		text(n === 1 ? "基本振動" : n + "倍振動", 30, CY - 22, FS, EIG, "left", true);
-		lambdaText(n, 30, CY + 24, FS);
+		if (eig) {
+			curve(function (x) { return mode(m, x); }, X0, X1, CY, A, 4.5, EIG);
+			for (let j = 0; j <= m; j++) dot(X0 + (X1 - X0) * j / m, CY, NODE);
+			text(m === 1 ? "基本振動" : m + "倍振動", 30, CY - 22, FS, EIG, "left", true);
+			lambdaText(m, 30, CY + 24, FS);
+		} else {
+			// 往復している波（細線）と、それを全部重ね合わせた結果（太線）
+			const r = R();
+			for (let j = Math.max(0, r - SHOWN_COPIES); j < r; j++) {
+				curve(function (x) { return right(m, j, x); }, X0, X1, CY, A, 1.5, NON, 0.22);
+				curve(function (x) { return left(m, j, x); },  X0, X1, CY, A, 1.5, NON, 0.22);
+			}
+			curve(function (x) { return nonResult(m, x); }, X0, X1, CY, A, 4.5, NON);
+			text("L = " + m + " × λ/2", 30, CY - 22, FS, NON, "left", true);
+			text("λ ≒ " + (2 / m).toFixed(2) + "L", 30, CY + 24, FS, TEXT, "left", true);
+		}
 	});
 }
 
@@ -351,6 +417,10 @@ function stop()    { paused = !paused; }
 function up()      { spd = Math.min(4, spd + 0.25); }
 function down()    { spd = Math.max(0, spd - 0.25); }
 function restart() { t = 0; spd = spdDef; draw(); }
+function setKind(n) { kind = n; t = 0; markButtons(); draw(); }
+function markButtons() {
+	for (let n = 1; n <= 2; n++) document.getElementById("k" + n).classList.toggle("on", kind === n);
+}
 function buttonBack() { window.history.back(); }
 
 /* ---------- 画面をタップしたら全画面 ---------- */
@@ -363,6 +433,7 @@ document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { p
 document.oncontextmenu = function () { return false; };
 
 /* ---------- 開始 ---------- */
+markButtons();
 resize();
 requestAnimationFrame(animate);
 </script>
