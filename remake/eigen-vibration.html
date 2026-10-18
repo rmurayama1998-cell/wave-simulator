@@ -376,6 +376,58 @@ function drawLanes(top, bottom) {
 }
 
 /* ============================================================
+   ③ 固有振動だけ：上に「全部が重なった弦」、下に基本・2倍・3倍振動を縦に並べる
+   上下とも同じ横幅・同じ振幅の倍率で描くので、下の3つを足すと上になる
+   ============================================================ */
+function drawEigenView() {
+	const list = shown(), r = R();
+	const X0 = 230, X1 = VWv - 70;
+	const A = 40;                         // 1つの固有振動の振幅（重なると最大 3 倍）
+	const dot = function (x, y, col) {
+		ctx.save();
+		ctx.fillStyle = col;
+		ctx.strokeStyle = "#ffffff";
+		ctx.lineWidth = 2 * k;
+		ctx.beginPath();
+		ctx.arc(x * k, y * k, 7 * k, 0, 2 * PI);
+		ctx.fill();
+		ctx.stroke();
+		ctx.restore();
+	};
+
+	// 上：すべての固有振動が重なった弦の振動
+	const top = 20, CY0 = 150, half0 = 125;
+	text("すべての固有振動が", 30, CY0 - 22, 19, TEXT, "left", true);
+	text("重なった弦の振動", 30, CY0 + 4, 19, TEXT, "left", true);
+	text("（下の3つの和）", 30, CY0 + 32, 15, GREEN, "left", true);
+	line(X0, CY0, X1, CY0, 1.5, GRID, [6, 6]);
+	wall(X0, CY0 - half0, CY0 + half0, -1);
+	wall(X1, CY0 - half0, CY0 + half0, 1);
+	curve(function (x) {
+		let s = 0;
+		for (const w of list) s += sumAt(w, x, r) / (2 * r);
+		return s;
+	}, X0, X1, CY0, A, 7, GREEN, 1, half0);
+	line(30, top + 270, VWv - 30, top + 270, 1.5, "#d9cec1");
+
+	// 下：基本振動・2倍振動・3倍振動
+	const laneTop = 305, laneH = 112;
+	list.forEach(function (w, i) {
+		const n = Math.round(w.m);
+		const CY = laneTop + laneH * (i + 0.5);
+		const h = laneH * 0.42;
+		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
+		line(X0, CY, X1, CY, 1, GRID, [5, 5]);
+		line(X0, CY - h, X0, CY + h, 4, WALLC);
+		line(X1, CY - h, X1, CY + h, 4, WALLC);
+		curve(function (x) { return sumAt(w, x, r) / (2 * r); }, X0, X1, CY, A, 4.5, EIG);
+		for (let j = 0; j <= n; j++) dot(X0 + (X1 - X0) * j / n, CY, "#2a2ad0");
+		text(n === 1 ? "基本振動" : n + "倍振動", 30, CY - 12, 19, EIG, "left", true);
+		text("L = " + n + " × λ/2　節 " + (n + 1) + " 個", 30, CY + 14, 14, SUB, "left");
+	});
+}
+
+/* ============================================================
    本体の描画
    ============================================================ */
 function draw() {
@@ -383,6 +435,13 @@ function draw() {
 	ctx.fillStyle = BG;
 	ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
+
+	if (mode === 3 && showLanes) {
+		text("━ 固有振動（1つずつ）", 30, -22, 16, EIG, "left", true);
+		text("━ すべてが重なった弦の振動", 250, -22, 16, GREEN, "left", true);
+		drawEigenView();
+		return;
+	}
 
 	// 凡例
 	ctx.save();
