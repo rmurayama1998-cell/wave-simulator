@@ -254,25 +254,39 @@ function draw() {
 	ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
 
-	const X0 = 230, X1 = VWv - 70;
+	const X0 = 330, X1 = VWv - 70;
 	const A = 44;                       // 1つの固有振動の振幅（重なると最大 3 倍）
+	const FS = 30;                      // 左の文字の大きさ
 
-	text("━ すべてが重なった弦の振動", 30, -22, 16, GREEN, "left", true);
-	text("━ 固有振動（1つずつ）", 290, -22, 16, EIG, "left", true);
+	text("━ すべてが重なった弦の振動", 30, -24, 18, GREEN, "left", true);
+	text("━ 固有振動（1つずつ）", 320, -24, 18, EIG, "left", true);
+
+	// 弦の長さ L（寸法線）
+	const DY = 14;
+	line(X0, DY - 12, X0, DY + 12, 2, TEXT);
+	line(X1, DY - 12, X1, DY + 12, 2, TEXT);
+	dimArrow(X0, X1, DY);
+	const mid = (X0 + X1) / 2;
+	ctx.save();
+	ctx.fillStyle = BG;
+	ctx.fillRect((mid - 110) * k, (DY - 18) * k, 220 * k, 36 * k);
+	ctx.restore();
+	text("弦の長さ L", mid, DY, 26, TEXT, "center", true);
 
 	// 上：すべての固有振動が重なった弦の振動
-	const CY0 = 160, half0 = 140;
-	text("すべての固有振動が", 30, CY0 - 22, 19, TEXT, "left", true);
-	text("重なった弦の振動", 30, CY0 + 4, 19, TEXT, "left", true);
-	text("（下の3つの和）", 30, CY0 + 32, 15, GREEN, "left", true);
+	const CY0 = 178, half0 = 140;
+	text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
+	text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
+	text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
+	text("（下の3つの和）", 30, CY0 + 62, 22, GREEN, "left", true);
 	line(X0, CY0, X1, CY0, 1.5, GRID, [6, 6]);
 	wall(X0, CY0 - half0, CY0 + half0, -1);
 	wall(X1, CY0 - half0, CY0 + half0, 1);
 	curve(total, X0, X1, CY0, A, 7, GREEN);
-	line(30, 318, VWv - 30, 318, 1.5, "#d9cec1");
+	line(30, 332, VWv - 30, 332, 1.5, "#d9cec1");
 
 	// 下：基本振動・2倍振動・3倍振動
-	const laneTop = 328, laneH = 124;
+	const laneTop = 340, laneH = 122;
 	MODES.forEach(function (n, i) {
 		const CY = laneTop + laneH * (i + 0.5);
 		const h = laneH * 0.42;
@@ -282,9 +296,40 @@ function draw() {
 		line(X1, CY - h, X1, CY + h, 4, WALLC);
 		curve(function (x) { return mode(n, x); }, X0, X1, CY, A, 4.5, EIG);
 		for (let j = 0; j <= n; j++) dot(X0 + (X1 - X0) * j / n, CY, NODE);
-		text(n === 1 ? "基本振動" : n + "倍振動", 30, CY - 12, 19, EIG, "left", true);
-		text("L = " + n + " × λ/2　節 " + (n + 1) + " 個", 30, CY + 14, 14, SUB, "left");
+		text(n === 1 ? "基本振動" : n + "倍振動", 30, CY - 22, FS, EIG, "left", true);
+		lambdaText(n, 30, CY + 24, FS);
 	});
+}
+
+// 両向き矢印の寸法線
+function dimArrow(x1, x2, y) {
+	line(x1, y, x2, y, 2, TEXT);
+	ctx.save();
+	ctx.fillStyle = TEXT;
+	for (const [x, s] of [[x1, 1], [x2, -1]]) {
+		ctx.beginPath();
+		ctx.moveTo(x * k, y * k);
+		ctx.lineTo((x + s * 16) * k, (y - 7) * k);
+		ctx.lineTo((x + s * 16) * k, (y + 7) * k);
+		ctx.closePath();
+		ctx.fill();
+	}
+	ctx.restore();
+}
+
+// 波長 λ = 2L/n を書く（割り切れないときは分数で）
+function lambdaText(n, x, y, size) {
+	const head = "λ = ";
+	if (n === 1 || n === 2) { text(head + (n === 1 ? "2L" : "L"), x, y, size, TEXT, "left", true); return; }
+	text(head, x, y, size, TEXT, "left", true);
+	ctx.save();
+	ctx.font = "bold " + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
+	const w0 = ctx.measureText(head).width / k;
+	ctx.restore();
+	const fx = x + w0 + 4, fw = size * 1.3, fs = size * 0.8;
+	text("2L", fx + fw / 2, y - size * 0.45, fs, TEXT, "center", true);
+	line(fx, y, fx + fw, y, 2.5, TEXT);
+	text(String(n), fx + fw / 2, y + size * 0.47, fs, TEXT, "center", true);
 }
 
 /* ============================================================
