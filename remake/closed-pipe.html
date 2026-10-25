@@ -247,47 +247,38 @@ function draw() {
 	ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
 
-	const X0 = 330, X1 = VWv - 70;
-	const A = 40;                       // 1つの振動の振幅（重なると最大 3 倍）
-	const FS = 30;                      // 左の文字の大きさ
-
-	text("━ 3つの振動が重なった気柱の振動", 30, -24, 18, GREEN, "left", true);
-	text("━ 固有振動（1つずつ）", 330, -24, 18, EIG, "left", true);
+	// 文字はすべて FS 以上（画面の高さの約 7% ＝ スライドの約 37pt 相当）
+	const FS = 56;
+	const X0 = 280, X1 = VWv - 260;     // 管の左端・右端（右側は波長の欄）
+	const A = 32;                       // 1つの振動の振幅（重なると最大 3 倍）
 
 	// 管の長さ L（寸法線）
-	const DY = 14;
-	line(X0, DY - 12, X0, DY + 12, 2, TEXT);
-	line(X1, DY - 12, X1, DY + 12, 2, TEXT);
+	const DY = 0;
+	line(X0, DY - 18, X0, DY + 18, 2.5, TEXT);
+	line(X1, DY - 18, X1, DY + 18, 2.5, TEXT);
 	dimArrow(X0, X1, DY);
 	const mid = (X0 + X1) / 2;
-	rect(mid - 110, DY - 18, 220, 36, BG);
-	text("管の長さ L", mid, DY, 26, TEXT, "center", true);
-	rect(X0 + 26, DY - 14, 100, 28, BG);
-	rect(X1 - 126, DY - 14, 100, 28, BG);
-	text("閉じた端", X0 + 32, DY, 20, SUB, "left", true);
-	text("開いた端", X1 - 32, DY, 20, SUB, "right", true);
+	rect(mid - 175, DY - 34, 350, 68, BG);
+	text("管の長さ L", mid, DY, FS, TEXT, "center", true);
 
 	// 上：3つの振動が重なった気柱の振動
-	const CY0 = 180, half0 = 126;
-	text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
-	text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
-	text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
-	text("（下の3つの和）", 30, CY0 + 62, 22, GREEN, "left", true);
+	const CY0 = 140, half0 = 100;
+	text("3つの和", 30, CY0, FS, GREEN, "left", true);
 	tube(X0, X1, CY0, half0);
 	curve(total, X0, X1, CY0, A, 7, GREEN);
-	line(30, 324, VWv - 30, 324, 1.5, "#d9cec1");
+	line(30, 258, VWv - 30, 258, 1.5, "#d9cec1");
 
-	// 下：3つの固有振動を1つずつ
-	const laneTop = 330, laneH = 112;
+	// 下：3つの固有振動を1つずつ（左に名前、右に波長）
+	const laneTop = 262, laneH = 146;
 	MODES.forEach(function (m, i) {
 		const CY = laneTop + laneH * (i + 0.5);
-		const h = laneH * 0.4;
+		const h = 55;
 		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
 		tube(X0, X1, CY, h);
 		curve(function (x) { return mode(m, x); }, X0, X1, CY, A, 4.5, EIG);
 		for (let j = 0; 2 * j < m; j++) dot(X0 + (X1 - X0) * 2 * j / m, CY, NODE);
-		text(m === 1 ? "基本振動" : m + "倍振動", 30, CY - 22, FS, EIG, "left", true);
-		lambdaText(m, 30, CY + 24, FS);
+		text(m === 1 ? "基本振動" : m + "倍振動", 30, CY, FS, EIG, "left", true);
+		lambdaText(m, X1 + 36, CY, FS);
 	});
 }
 
@@ -307,7 +298,7 @@ function dimArrow(x1, x2, y) {
 	ctx.restore();
 }
 
-// 波長 λ = 4L/n を書く（割り切れないときは分数で）
+// 波長 λ = 4L/n を書く（割り切れないときは分数で）。分数の数字も size の大きさ
 function lambdaText(n, x, y, size) {
 	const head = "λ = ";
 	if (n === 1) { text(head + "4L", x, y, size, TEXT, "left", true); return; }
@@ -316,10 +307,10 @@ function lambdaText(n, x, y, size) {
 	ctx.font = "bold " + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
 	const w0 = ctx.measureText(head).width / k;
 	ctx.restore();
-	const fx = x + w0 + 4, fw = size * 1.3, fs = size * 0.8;
-	text("4L", fx + fw / 2, y - size * 0.45, fs, TEXT, "center", true);
-	line(fx, y, fx + fw, y, 2.5, TEXT);
-	text(String(n), fx + fw / 2, y + size * 0.47, fs, TEXT, "center", true);
+	const fx = x + w0 + 4, fw = size * 1.3;
+	text("4L", fx + fw / 2, y - size * 0.6, size, TEXT, "center", true);
+	line(fx, y, fx + fw, y, 3, TEXT);
+	text(String(n), fx + fw / 2, y + size * 0.6, size, TEXT, "center", true);
 }
 
 /* ============================================================
