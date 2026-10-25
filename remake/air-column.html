@@ -99,6 +99,10 @@ button.on:hover { background: #4a4038; }
 		<button id="kOpen" onclick="setKind('open')">開管</button>
 	</span>
 	<span class="grp">
+		<button id="w1" onclick="setWave(1)">固有振動の波</button>
+		<button id="w2" onclick="setWave(2)">固有振動でない波</button>
+	</span>
+	<span class="grp">
 		<button onclick="stop()">停止／再開</button>
 		<button onclick="up()">描画↑</button>
 		<button onclick="down()">描画↓</button>
@@ -119,7 +123,12 @@ button.on:hover { background: #4a4038; }
        左の閉じた端は必ず節、右の開いた端は必ず腹。L = n × λ/4 なので λ = 4L/n
    ・開管：n 倍振動（n = 1, 2, 3） y = cos(nπx) cos(nπt/2)
        両端とも必ず腹。L = n × λ/2 なので λ = 2L/n
-       基本振動の周期は閉管と同じ 4 にしてある
+       基本振動の周期は閉管と同じ 4 にしてある（そのため音速は閉管 1・開管 1/2）
+   ・固有振動でない波（弦のページと同じ考え方）
+       … 管の中を往復する波を、1往復ぶんずつ全部重ね合わせる。
+         右の開いた端では反転せずに反射、左端は閉管なら反転（閉じた端）・開管なら反転しない。
+         1往復で位相が 2kL（＋閉管は π）ずれるので、固有振動でなければ打ち消し合って 0 に近づく。
+         往復した波の和は等比数列の和の公式で計算し、「2 × 往復回数」で割る
    URL に ?open を付けると開管で始まる
    仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
    ============================================================ */
@@ -137,7 +146,10 @@ let VWv = VW;
 const PI = Math.PI, sin = Math.sin, cos = Math.cos;
 
 const MODES = { closed: [1, 3, 5], open: [1, 2, 3] };   // 並べる固有振動
-const WT = 8;                  // 管の壁の厚さ
+const NONEIG = { closed: [2.5, 1.6, 0.9], open: [1.5, 0.8, 0.6] };   // 固有振動でない波の λ（L を 1 として）
+const RMAX = 40;                // 往復回数の上限
+const SHOWN_COPIES = 5;         // 細線で描く往復の数（最新のものから）
+const WT = 8;                 // 管の壁の厚さ
 
 /* ---------- 色 ---------- */
 const BG    = "#faf4ee";
@@ -149,9 +161,11 @@ const SUB   = "#7a6e62";
 const EIG   = "#0060d0";        // 1つずつの固有振動（青）
 const GREEN = "#00a000";        // 重なった気柱の振動（緑）
 const NODE  = "#2a2ad0";        // 節の点
+const NON   = "#e07000";        // 固有振動でない波（オレンジ）
 
 /* ---------- 状態 ---------- */
 let kind = /[?&]open\b/.test(location.search) ? "open" : "closed";
+let wave = 1;                   // 1:固有振動の波 2:固有振動でない波
 let t = 0;
 const spdDef = 1;
 let spd = spdDef;
@@ -186,6 +200,41 @@ function mode(n, x) {
 function total(x) {
 	let s = 0;
 	for (const n of MODES[kind]) s += mode(n, x);
+	return s;
+}
+
+/* ---------- 固有振動でない波（往復する波の重ね合わせ） ---------- */
+function vel() { return (kind === "closed") ? 1 : 0.5; }
+function R() { return Math.min(RMAX, 1 + Math.floor(t * vel() / 2)); }
+// 1往復での位相のずれ（閉管は閉じた端で反転するぶん π を足す）
+function phiOf(kk) { return 2 * kk + ((kind === "closed") ? PI : 0); }
+
+// j 往復目の右へ進む波と、それが右の開いた端で反射した左へ進む波（反転しない）
+function right(lam, j, x) {
+	const kk = 2 * PI / lam;
+	return sin(kk * x - kk * vel() * t + j * phiOf(kk));
+}
+function left(lam, j, x) {
+	const kk = 2 * PI / lam;
+	return sin(kk * (2 - x) - kk * vel() * t + j * phiOf(kk));
+}
+
+// sin(a) + sin(a+φ) + … + sin(a+(r-1)φ)  （等比数列の和）
+function sinSum(a, phi, r) {
+	const s = sin(phi / 2);
+	if (Math.abs(s) < 1e-9) return r * sin(a);
+	return sin(a + (r - 1) * phi / 2) * sin(r * phi / 2) / s;
+}
+
+// r 往復ぶんの波をすべて重ね合わせ、往復回数×2 で割った変位
+function nonResult(lam, x) {
+	const r = R(), kk = 2 * PI / lam, phi = phiOf(kk), wt = kk * vel() * t;
+	return (sinSum(kk * x - wt, phi, r) + sinSum(kk * (2 - x) - wt, phi, r)) / (2 * r);
+}
+
+function nonTotal(x) {
+	let s = 0;
+	for (const lam of NONEIG[kind]) s += nonResult(lam, x);
 	return s;
 }
 
@@ -228,8 +277,9 @@ function text(s, x, y, size, col, align, bold) {
 }
 
 // 関数 f(x) (x: 0〜1) を、左端 X0・右端 X1・中心線 CY・倍率 A で描く
-function curve(f, X0, X1, CY, A, wid, col) {
+function curve(f, X0, X1, CY, A, wid, col, alpha) {
 	ctx.save();
+	ctx.globalAlpha = (alpha === undefined) ? 1 : alpha;
 	ctx.strokeStyle = col;
 	ctx.lineWidth = wid * k;
 	ctx.lineCap = "round";
@@ -278,7 +328,8 @@ function draw() {
 
 	// 文字はすべて FS 以上（画面の高さの約 7% ＝ スライドの約 37pt 相当）
 	const FS = 56;
-	const X0 = 280, X1 = VWv - 260;     // 管の左端・右端（右側は波長の欄）
+	const eig = (wave === 1);
+	const X0 = 280, X1 = VWv - (eig ? 260 : 300);   // 管の左端・右端（右側は波長の欄）
 	const A = 32;                       // 1つの振動の振幅（重なると最大 3 倍）
 
 	// 管の長さ L（寸法線）
@@ -294,11 +345,32 @@ function draw() {
 	const CY0 = 140, half0 = 100;
 	text("3つの和", 30, CY0, FS, GREEN, "left", true);
 	tube(X0, X1, CY0, half0);
-	curve(total, X0, X1, CY0, A, 7, GREEN);
+	curve(eig ? total : nonTotal, X0, X1, CY0, A, 7, GREEN);
+	if (!eig) {
+		text("往復", X1 + 36, CY0 - 34, FS, TEXT, "left", true);
+		text(R() + "回", X1 + 36, CY0 + 34, FS, TEXT, "left", true);
+	}
 	line(30, 258, VWv - 30, 258, 1.5, "#d9cec1");
 
 	// 下：3つの固有振動を1つずつ（左に名前、右に波長）
 	const laneTop = 262, laneH = 146;
+	if (!eig) {
+		NONEIG[kind].forEach(function (lam, i) {
+			const CY = laneTop + laneH * (i + 0.5);
+			if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
+			tube(X0, X1, CY, 55);
+			// 往復している波（細線）と、それを全部重ね合わせた結果（太線）
+			const r = R();
+			for (let j = Math.max(0, r - SHOWN_COPIES); j < r; j++) {
+				curve(function (x) { return right(lam, j, x); }, X0, X1, CY, A, 1.5, NON, 0.22);
+				curve(function (x) { return left(lam, j, x); },  X0, X1, CY, A, 1.5, NON, 0.22);
+			}
+			curve(function (x) { return nonResult(lam, x); }, X0, X1, CY, A, 4.5, NON);
+			text("波" + "ABC"[i], 30, CY, FS, NON, "left", true);
+			text("λ = " + lam + "L", X1 + 36, CY, FS, TEXT, "left", true);
+		});
+		return;
+	}
 	MODES[kind].forEach(function (m, i) {
 		const CY = laneTop + laneH * (i + 0.5);
 		const h = 55;
@@ -367,7 +439,9 @@ function up()      { spd = Math.min(4, spd + 0.25); }
 function down()    { spd = Math.max(0, spd - 0.25); }
 function restart() { t = 0; spd = spdDef; draw(); }
 function setKind(s) { kind = s; t = 0; markButtons(); draw(); }
+function setWave(n) { wave = n; t = 0; markButtons(); draw(); }
 function markButtons() {
+	for (let n = 1; n <= 2; n++) document.getElementById("w" + n).classList.toggle("on", wave === n);
 	document.getElementById("kClosed").classList.toggle("on", kind === "closed");
 	document.getElementById("kOpen").classList.toggle("on", kind === "open");
 }
