@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>開管の共鳴（基本振動・2倍振動・3倍振動）</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info2 {
+	position: fixed;
+	left: 0;
+	bottom: 2vh;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	color: #4a4038;
+}
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info2">
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+		<button onclick="restart()">最初から</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   開管の共鳴（基本振動・2倍振動・3倍振動）
+   上に「3つの振動が重なった気柱の振動」、下にその3つを縦に並べる。
+   上下とも同じ横幅・同じ振幅の倍率で描くので、下の3つを足すと上になる。
+   ・n 倍振動（n = 1, 2, 3） y = cos(nπx) cos(nπt/2)
+       x は左の開いた端 0 〜 右の開いた端 1。両端とも必ず腹。
+       L = n × λ/2 なので λ = 2L/n
+       基本振動の周期は閉管のページと同じ 4（描画↑↓ が 1 倍のとき 4 秒）にしてある
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;
+const MT = 50;                  // 上の余白
+const VWmin = 1200;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let k = 1;                      // 仮想 -> 実ピクセルの倍率
+let offY = 0;
+let VWv = VW;
+
+const PI = Math.PI, sin = Math.sin, cos = Math.cos;
+
+const MODES = [1, 2, 3];       // 並べる固有振動
+const WT = 8;                   // 管の壁の厚さ
+
+/* ---------- 色 ---------- */
+const BG    = "#faf4ee";
+const GRID  = "#b8aea3";
+const TUBE  = "#c79a5c";        // 管の壁
+const INNER = "#fffaf3";        // 管の中
+const TEXT  = "#3f362e";
+const SUB   = "#7a6e62";
+const EIG   = "#0060d0";        // 1つずつの固有振動（青）
+const GREEN = "#00a000";        // 重なった気柱の振動（緑）
+const NODE  = "#2a2ad0";        // 節の点
+
+/* ---------- 状態 ---------- */
+let t = 0;
+const spdDef = 1;
+let spd = spdDef;
+let paused = false;
+let lastNow = 0;
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	k = Math.min(cv.height / (VH + MT), cv.width / VWmin);
+	VWv = cv.width / k;
+	offY = (cv.height - (VH + MT) * k) / 2;
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   空気の変位
+   ============================================================ */
+function mode(n, x) { return cos(n * PI * x) * cos(n * PI * t / 2); }
+
+function total(x) {
+	let s = 0;
+	for (const n of MODES) s += mode(n, x);
+	return s;
+}
+
+/* ============================================================
+   描画のための小道具（仮想座標で受け取る）
+   ============================================================ */
+function line(x1, y1, x2, y2, wid, col, dash) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * k;
+	if (dash) ctx.setLineDash(dash.map(function (d) { return d * k; }));
+	ctx.beginPath();
+	ctx.moveTo(x1 * k, y1 * k);
+	ctx.lineTo(x2 * k, y2 * k);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function rect(x, y, w, h, col) {
+	ctx.fillStyle = col;
+	ctx.fillRect(x * k, y * k, w * k, h * k);
+}
+
+function text(s, x, y, size, col, align, bold) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.font = (bold ? "bold " : "") + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
+	ctx.textAlign = align || "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(s, x * k, y * k);
+	ctx.restore();
+}
+
+// 関数 f(x) (x: 0〜1) を、左端 X0・右端 X1・中心線 CY・倍率 A で描く
+function curve(f, X0, X1, CY, A, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * k;
+	ctx.lineCap = "round";
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	const N = 300;
+	for (let i = 0; i <= N; i++) {
+		const x = i / N;
+		const px = (X0 + (X1 - X0) * x) * k, py = (CY - A * f(x)) * k;
+		if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 開管（両端が開いた端）。h は管の内側の半分の太さ
+function tube(X0, X1, CY, h) {
+	rect(X0, CY - h, X1 - X0, h * 2, INNER);
+	rect(X0, CY - h - WT, X1 - X0, WT, TUBE);
+	rect(X0, CY + h, X1 - X0, WT, TUBE);
+	line(X0, CY, X1, CY, 1.5, GRID, [6, 6]);
+}
+
+function dot(x, y, col) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.strokeStyle = "#ffffff";
+	ctx.lineWidth = 2 * k;
+	ctx.beginPath();
+	ctx.arc(x * k, y * k, 7 * k, 0, 2 * PI);
+	ctx.fill();
+	ctx.stroke();
+	ctx.restore();
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
+
+	const X0 = 330, X1 = VWv - 70;
+	const A = 40;                       // 1つの振動の振幅（重なると最大 3 倍）
+	const FS = 30;                      // 左の文字の大きさ
+
+	text("━ 3つの振動が重なった気柱の振動", 30, -24, 18, GREEN, "left", true);
+	text("━ 固有振動（1つずつ）", 330, -24, 18, EIG, "left", true);
+
+	// 管の長さ L（寸法線）
+	const DY = 14;
+	line(X0, DY - 12, X0, DY + 12, 2, TEXT);
+	line(X1, DY - 12, X1, DY + 12, 2, TEXT);
+	dimArrow(X0, X1, DY);
+	const mid = (X0 + X1) / 2;
+	rect(mid - 110, DY - 18, 220, 36, BG);
+	text("管の長さ L", mid, DY, 26, TEXT, "center", true);
+	rect(X0 + 26, DY - 14, 100, 28, BG);
+	rect(X1 - 126, DY - 14, 100, 28, BG);
+	text("開いた端", X0 + 32, DY, 20, SUB, "left", true);
+	text("開いた端", X1 - 32, DY, 20, SUB, "right", true);
+
+	// 上：3つの振動が重なった気柱の振動
+	const CY0 = 180, half0 = 126;
+	text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
+	text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
+	text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
+	text("（下の3つの和）", 30, CY0 + 62, 22, GREEN, "left", true);
+	tube(X0, X1, CY0, half0);
+	curve(total, X0, X1, CY0, A, 7, GREEN);
+	line(30, 324, VWv - 30, 324, 1.5, "#d9cec1");
+
+	// 下：3つの固有振動を1つずつ
+	const laneTop = 330, laneH = 112;
+	MODES.forEach(function (m, i) {
+		const CY = laneTop + laneH * (i + 0.5);
+		const h = laneH * 0.4;
+		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
+		tube(X0, X1, CY, h);
+		curve(function (x) { return mode(m, x); }, X0, X1, CY, A, 4.5, EIG);
+		for (let j = 0; j < m; j++) dot(X0 + (X1 - X0) * (2 * j + 1) / (2 * m), CY, NODE);
+		text(m === 1 ? "基本振動" : m + "倍振動", 30, CY - 22, FS, EIG, "left", true);
+		lambdaText(m, 30, CY + 24, FS);
+	});
+}
+
+// 両向き矢印の寸法線
+function dimArrow(x1, x2, y) {
+	line(x1, y, x2, y, 2, TEXT);
+	ctx.save();
+	ctx.fillStyle = TEXT;
+	for (const [x, s] of [[x1, 1], [x2, -1]]) {
+		ctx.beginPath();
+		ctx.moveTo(x * k, y * k);
+		ctx.lineTo((x + s * 16) * k, (y - 7) * k);
+		ctx.lineTo((x + s * 16) * k, (y + 7) * k);
+		ctx.closePath();
+		ctx.fill();
+	}
+	ctx.restore();
+}
+
+// 波長 λ = 2L/n を書く（割り切れないときは分数で）
+function lambdaText(n, x, y, size) {
+	const head = "λ = ";
+	if (n === 1 || n === 2) { text(head + (n === 1 ? "2L" : "L"), x, y, size, TEXT, "left", true); return; }
+	text(head, x, y, size, TEXT, "left", true);
+	ctx.save();
+	ctx.font = "bold " + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
+	const w0 = ctx.measureText(head).width / k;
+	ctx.restore();
+	const fx = x + w0 + 4, fw = size * 1.3, fs = size * 0.8;
+	text("2L", fx + fw / 2, y - size * 0.45, fs, TEXT, "center", true);
+	line(fx, y, fx + fw, y, 2.5, TEXT);
+	text(String(n), fx + fw / 2, y + size * 0.47, fs, TEXT, "center", true);
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function animate(now) {
+	if (!lastNow) lastNow = now;
+	const dt = Math.min(0.05, (now - lastNow) / 1000);
+	lastNow = now;
+	if (!paused) t += dt * spd;
+	draw();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function stop()    { paused = !paused; }
+function up()      { spd = Math.min(4, spd + 0.25); }
+function down()    { spd = Math.max(0, spd - 0.25); }
+function restart() { t = 0; spd = spdDef; draw(); }
+function buttonBack() { window.history.back(); }
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+resize();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
