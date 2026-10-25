@@ -94,14 +94,11 @@ button.on:hover { background: #4a4038; }
 
 <canvas id="myCanvas"></canvas>
 
-<div id="info">
-	<span class="grp">
-		<button id="k1" onclick="setKind(1)">固有振動の波（定常波になる）</button>
-		<button id="k2" onclick="setKind(2)">固有振動でない波（定常波にならない）</button>
-	</span>
-</div>
-
 <div id="info2">
+	<span class="grp">
+		<button id="k1" onclick="setKind(1)">固有振動の波</button>
+		<button id="k2" onclick="setKind(2)">固有振動でない波</button>
+	</span>
 	<span class="grp">
 		<button onclick="stop()">停止／再開</button>
 		<button onclick="up()">描画↑</button>
@@ -119,7 +116,7 @@ button.on:hover { background: #4a4038; }
    上に「3つの波が重なった弦の振動」、下にその3つの波を縦に並べる。
    上下とも同じ横幅・同じ振幅の倍率で描くので、下の3つを足すと上になる。
    ・固有振動の波 … n 倍振動 y = sin(nπx) cos(nπt)   （x は弦の左端 0 〜 右端 1）
-   ・固有振動でない波（L = m × λ/2、m が整数でない）
+   ・固有振動でない波（L = m × λ/2、m = 1.25, 1.75, 2.25 で整数でない）
        … 弦の上を往復する波を、1往復ぶんずつ全部重ね合わせる。
          往復のたびに位相がずれるので打ち消し合い、0 に近づく。
          往復した波の和は等比数列の和の公式で計算する。
@@ -140,7 +137,7 @@ let VWv = VW;
 const PI = Math.PI, sin = Math.sin, cos = Math.cos;
 
 const MODES = [1, 2, 3];        // 並べる固有振動
-const NONM  = [1.3, 1.7, 2.4];  // 固有振動でない波（L = m × λ/2）
+const NONM  = [1.25, 1.75, 2.25];  // 固有振動でない波（L = m × λ/2、λ = 8L/5, 8L/7, 8L/9）
 const RMAX  = 40;               // 往復回数の上限
 const TRT   = 2;                // 1往復にかかる時間（弦の長さ L = 1、波の速さ 1）
 const SHOWN_COPIES = 5;         // 細線で描く往復の数（最新のものから）
@@ -298,52 +295,44 @@ function draw() {
 	ctx.fillRect(0, 0, cv.width, cv.height);
 	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
 
-	const X0 = 330, X1 = VWv - 70;
-	const A = 42;                       // 1つの波の振幅（重なると最大 3 倍）
-	const FS = 30;                      // 左の文字の大きさ
+	// 文字はすべて FS（気柱の共鳴のページと同じ大きさ・同じ配置）
+	const FS = 56;
+	const X0 = 280, X1 = VWv - 260;     // 弦の左端・右端（右側は波長の欄）
+	const A = 32;                       // 1つの波の振幅（重なると最大 3 倍）
 	const eig = (kind === 1);
 	const COL = eig ? EIG : NON;
 
-	text("━ 3つの波が重なった弦の振動", 30, -24, 18, GREEN, "left", true);
-	text(eig ? "━ 固有振動（1つずつ）" : "━ 固有振動でない波（1つずつ）", 330, -24, 18, COL, "left", true);
-	if (!eig) text("往復回数  " + R() + " 回" + (R() === RMAX ? "（上限）" : ""), X1, -24, 22, TEXT, "right", true);
-
 	// 弦の長さ L（寸法線）
-	const DY = 14;
-	line(X0, DY - 12, X0, DY + 12, 2, TEXT);
-	line(X1, DY - 12, X1, DY + 12, 2, TEXT);
+	const DY = 0;
+	line(X0, DY - 18, X0, DY + 18, 2.5, TEXT);
+	line(X1, DY - 18, X1, DY + 18, 2.5, TEXT);
 	dimArrow(X0, X1, DY);
 	const mid = (X0 + X1) / 2;
 	ctx.save();
 	ctx.fillStyle = BG;
-	ctx.fillRect((mid - 110) * k, (DY - 18) * k, 220 * k, 36 * k);
+	ctx.fillRect((mid - 175) * k, (DY - 34) * k, 350 * k, 68 * k);
 	ctx.restore();
-	text("弦の長さ L", mid, DY, 26, TEXT, "center", true);
+	text("弦の長さ L", mid, DY, FS, TEXT, "center", true);
 
 	// 上：3つの波が重なった弦の振動
-	const CY0 = 172, half0 = 132;
-	if (eig) {
-		text("すべての", 30, CY0 - 52, FS, TEXT, "left", true);
-		text("固有振動が", 30, CY0 - 14, FS, TEXT, "left", true);
-		text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
-	} else {
-		text("固有振動で", 30, CY0 - 52, FS, TEXT, "left", true);
-		text("ない波が", 30, CY0 - 14, FS, TEXT, "left", true);
-		text("重なった振動", 30, CY0 + 24, FS, TEXT, "left", true);
-	}
-	text("（下の3つの和）", 30, CY0 + 62, 22, GREEN, "left", true);
+	const CY0 = 140, half0 = 100;
+	text("3つの和", 30, CY0, FS, GREEN, "left", true);
 	line(X0, CY0, X1, CY0, 1.5, GRID, [6, 6]);
 	wall(X0, CY0 - half0, CY0 + half0, -1);
 	wall(X1, CY0 - half0, CY0 + half0, 1);
 	curve(eig ? total : nonTotal, X0, X1, CY0, A, 7, GREEN);
-	line(30, 318, VWv - 30, 318, 1.5, "#d9cec1");
+	if (!eig) {
+		text("往復", X1 + 36, CY0 - 34, FS, TEXT, "left", true);
+		text(R() + "回", X1 + 36, CY0 + 34, FS, TEXT, "left", true);
+	}
+	line(30, 258, VWv - 30, 258, 1.5, "#d9cec1");
 
-	// 下：3つの波を1つずつ
-	const laneTop = 326, laneH = 112;
+	// 下：3つの波を1つずつ（左に名前、右に波長）
+	const laneTop = 262, laneH = 146;
 	const list = eig ? MODES : NONM;
 	list.forEach(function (m, i) {
 		const CY = laneTop + laneH * (i + 0.5);
-		const h = laneH * 0.44;
+		const h = 55;
 		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
 		line(X0, CY, X1, CY, 1, GRID, [5, 5]);
 		line(X0, CY - h, X0, CY + h, 4, WALLC);
@@ -351,8 +340,8 @@ function draw() {
 		if (eig) {
 			curve(function (x) { return mode(m, x); }, X0, X1, CY, A, 4.5, EIG);
 			for (let j = 0; j <= m; j++) dot(X0 + (X1 - X0) * j / m, CY, NODE);
-			text(m === 1 ? "基本振動" : m + "倍振動", 30, CY - 22, FS, EIG, "left", true);
-			lambdaText(m, 30, CY + 24, FS);
+			text(m === 1 ? "基本振動" : m + "倍振動", 30, CY, FS, EIG, "left", true);
+			lambdaText(2, m, X1 + 36, CY, FS);
 		} else {
 			// 往復している波（細線）と、それを全部重ね合わせた結果（太線）
 			const r = R();
@@ -361,8 +350,8 @@ function draw() {
 				curve(function (x) { return left(m, j, x); },  X0, X1, CY, A, 1.5, NON, 0.22);
 			}
 			curve(function (x) { return nonResult(m, x); }, X0, X1, CY, A, 4.5, NON);
-			text("L = " + m + " × λ/2", 30, CY - 22, FS, NON, "left", true);
-			text("λ ≒ " + (2 / m).toFixed(2) + "L", 30, CY + 24, FS, TEXT, "left", true);
+			text("波 " + "ABC"[i], 30, CY, FS, NON, "left", true);
+			lambdaText(8, Math.round(4 * m), X1 + 36, CY, FS);   // λ = 2L/m = 8L/(4m)
 		}
 	});
 }
@@ -383,19 +372,23 @@ function dimArrow(x1, x2, y) {
 	ctx.restore();
 }
 
-// 波長 λ = 2L/n を書く（割り切れないときは分数で）
-function lambdaText(n, x, y, size) {
+// 波長 λ = (num)L/(den) を書く（割り切れないときは分数で）。分数の数字も size の大きさ
+function lambdaText(num, den, x, y, size) {
 	const head = "λ = ";
-	if (n === 1 || n === 2) { text(head + (n === 1 ? "2L" : "L"), x, y, size, TEXT, "left", true); return; }
+	if (num % den === 0) {
+		const q = num / den;
+		text(head + (q === 1 ? "" : q) + "L", x, y, size, TEXT, "left", true);
+		return;
+	}
 	text(head, x, y, size, TEXT, "left", true);
 	ctx.save();
 	ctx.font = "bold " + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
 	const w0 = ctx.measureText(head).width / k;
 	ctx.restore();
-	const fx = x + w0 + 4, fw = size * 1.3, fs = size * 0.8;
-	text("2L", fx + fw / 2, y - size * 0.45, fs, TEXT, "center", true);
-	line(fx, y, fx + fw, y, 2.5, TEXT);
-	text(String(n), fx + fw / 2, y + size * 0.47, fs, TEXT, "center", true);
+	const fx = x + w0 + 4, fw = size * 1.3;
+	text(num + "L", fx + fw / 2, y - size * 0.6, size, TEXT, "center", true);
+	line(fx, y, fx + fw, y, 3, TEXT);
+	text(String(den), fx + fw / 2, y + size * 0.6, size, TEXT, "center", true);
 }
 
 /* ============================================================
