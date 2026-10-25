@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>気柱の共鳴（閉管・開管）</title>
+<style>
+* {
+	-moz-user-select: none;
+	-ms-user-select: none;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-appearance: none;
+}
+html, body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+button, html, body, li { touch-action: manipulation; }
+
+canvas#myCanvas {
+	display: block;
+	position: fixed;
+	top: 0; left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: #faf4ee;
+}
+
+#info2 {
+	position: fixed;
+	left: 0;
+	bottom: 2vh;
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+	gap: 8px 14px;
+	padding: 0 12px;
+	box-sizing: border-box;
+	color: #4a4038;
+}
+
+/* 関連するボタンをひとまとまりに見せる */
+.grp {
+	display: inline-flex;
+	gap: 6px;
+	padding: 4px 5px;
+	background: rgba(74, 64, 56, 0.07);
+	border-radius: 999px;
+}
+
+button {
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0.36em 0.95em;
+	border: 0;
+	border-radius: 999px;
+	background: #fffdfa;
+	color: #4a4038;
+	font-family: inherit;
+	font-size: clamp(11px, 1.32vw, 20px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.15;
+	white-space: nowrap;
+	cursor: pointer;
+	box-shadow: 0 1px 2px rgba(90, 70, 50, 0.16);
+	transition: background-color .16s ease, color .16s ease,
+	            box-shadow .16s ease, transform .12s ease;
+}
+button:hover  { background: #ffffff; box-shadow: 0 3px 8px rgba(90, 70, 50, 0.22); }
+button:active { transform: translateY(1px); box-shadow: 0 1px 2px rgba(90, 70, 50, 0.18); }
+button:focus-visible { outline: 2px solid #8c7a66; outline-offset: 2px; }
+
+/* 選択中のボタン */
+button.on {
+	background: #3f362e;
+	color: #fff8f0;
+	box-shadow: 0 3px 10px rgba(63, 54, 46, 0.34);
+}
+button.on:hover { background: #4a4038; }
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas"></canvas>
+
+<div id="info2">
+	<span class="grp">
+		<button id="kClosed" onclick="setKind('closed')">閉管</button>
+		<button id="kOpen" onclick="setKind('open')">開管</button>
+	</span>
+	<span class="grp">
+		<button onclick="stop()">停止／再開</button>
+		<button onclick="up()">描画↑</button>
+		<button onclick="down()">描画↓</button>
+		<button onclick="restart()">最初から</button>
+	</span>
+	<button onclick="buttonBack()">戻る</button>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   気柱の共鳴（閉管・開管をボタンで切り替え）
+   上に「3つの振動が重なった気柱の振動」、下にその3つを縦に並べる。
+   上下とも同じ横幅・同じ振幅の倍率で描くので、下の3つを足すと上になる。
+   x は管の左端 0 〜 右端 1。
+   ・閉管：n 倍振動（n = 1, 3, 5） y = sin(nπx/2) cos(nπt/2)
+       左の閉じた端は必ず節、右の開いた端は必ず腹。L = n × λ/4 なので λ = 4L/n
+   ・開管：n 倍振動（n = 1, 2, 3） y = cos(nπx) cos(nπt/2)
+       両端とも必ず腹。L = n × λ/2 なので λ = 2L/n
+       基本振動の周期は閉管と同じ 4 にしてある
+   URL に ?open を付けると開管で始まる
+   仮想座標系 1366 x 768 を基準に、画面の高さに合わせて拡大する
+   ============================================================ */
+
+const cv  = document.getElementById("myCanvas");
+const ctx = cv.getContext("2d");
+
+const VW = 1366, VH = 768;
+const MT = 50;                  // 上の余白
+const VWmin = 1200;             // 画面が細長いときでも、これだけの横幅は必ず見せる
+let k = 1;                      // 仮想 -> 実ピクセルの倍率
+let offY = 0;
+let VWv = VW;
+
+const PI = Math.PI, sin = Math.sin, cos = Math.cos;
+
+const MODES = { closed: [1, 3, 5], open: [1, 2, 3] };   // 並べる固有振動
+const WT = 8;                  // 管の壁の厚さ
+
+/* ---------- 色 ---------- */
+const BG    = "#faf4ee";
+const GRID  = "#b8aea3";
+const TUBE  = "#c79a5c";        // 管の壁
+const INNER = "#fffaf3";        // 管の中
+const TEXT  = "#3f362e";
+const SUB   = "#7a6e62";
+const EIG   = "#0060d0";        // 1つずつの固有振動（青）
+const GREEN = "#00a000";        // 重なった気柱の振動（緑）
+const NODE  = "#2a2ad0";        // 節の点
+
+/* ---------- 状態 ---------- */
+let kind = /[?&]open\b/.test(location.search) ? "open" : "closed";
+let t = 0;
+const spdDef = 1;
+let spd = spdDef;
+let paused = false;
+let lastNow = 0;
+
+/* ============================================================
+   画面サイズ
+   ============================================================ */
+function resize() {
+	const dpr = Math.min(window.devicePixelRatio || 1, 2);
+	const w = cv.clientWidth  || window.innerWidth;
+	const h = cv.clientHeight || window.innerHeight;
+	cv.width  = Math.round(w * dpr);
+	cv.height = Math.round(h * dpr);
+	k = Math.min(cv.height / (VH + MT), cv.width / VWmin);
+	VWv = cv.width / k;
+	offY = (cv.height - (VH + MT) * k) / 2;
+	draw();
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () { setTimeout(resize, 300); });
+
+/* ============================================================
+   空気の変位
+   ============================================================ */
+function mode(n, x) {
+	const shape = (kind === "closed") ? sin(n * PI * x / 2) : cos(n * PI * x);
+	return shape * cos(n * PI * t / 2);
+}
+
+function total(x) {
+	let s = 0;
+	for (const n of MODES[kind]) s += mode(n, x);
+	return s;
+}
+
+// n 倍振動の節の位置（0〜1）
+function nodes(n) {
+	const list = [];
+	if (kind === "closed") for (let j = 0; 2 * j < n; j++) list.push(2 * j / n);
+	else for (let j = 0; j < n; j++) list.push((2 * j + 1) / (2 * n));
+	return list;
+}
+
+/* ============================================================
+   描画のための小道具（仮想座標で受け取る）
+   ============================================================ */
+function line(x1, y1, x2, y2, wid, col, dash) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * k;
+	if (dash) ctx.setLineDash(dash.map(function (d) { return d * k; }));
+	ctx.beginPath();
+	ctx.moveTo(x1 * k, y1 * k);
+	ctx.lineTo(x2 * k, y2 * k);
+	ctx.stroke();
+	ctx.restore();
+}
+
+function rect(x, y, w, h, col) {
+	ctx.fillStyle = col;
+	ctx.fillRect(x * k, y * k, w * k, h * k);
+}
+
+function text(s, x, y, size, col, align, bold) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.font = (bold ? "bold " : "") + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
+	ctx.textAlign = align || "left";
+	ctx.textBaseline = "middle";
+	ctx.fillText(s, x * k, y * k);
+	ctx.restore();
+}
+
+// 関数 f(x) (x: 0〜1) を、左端 X0・右端 X1・中心線 CY・倍率 A で描く
+function curve(f, X0, X1, CY, A, wid, col) {
+	ctx.save();
+	ctx.strokeStyle = col;
+	ctx.lineWidth = wid * k;
+	ctx.lineCap = "round";
+	ctx.lineJoin = "round";
+	ctx.beginPath();
+	const N = 300;
+	for (let i = 0; i <= N; i++) {
+		const x = i / N;
+		const px = (X0 + (X1 - X0) * x) * k, py = (CY - A * f(x)) * k;
+		if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+// 管。閉管は左端をふさぐ。h は管の内側の半分の太さ
+function tube(X0, X1, CY, h) {
+	const L = (kind === "closed") ? X0 - WT : X0;
+	rect(X0, CY - h, X1 - X0, h * 2, INNER);
+	rect(L, CY - h - WT, X1 - L, WT, TUBE);
+	rect(L, CY + h, X1 - L, WT, TUBE);
+	if (kind === "closed") rect(X0 - WT, CY - h - WT, WT, h * 2 + WT * 2, TUBE);
+	line(X0, CY, X1, CY, 1.5, GRID, [6, 6]);
+}
+
+function dot(x, y, col) {
+	ctx.save();
+	ctx.fillStyle = col;
+	ctx.strokeStyle = "#ffffff";
+	ctx.lineWidth = 2 * k;
+	ctx.beginPath();
+	ctx.arc(x * k, y * k, 7 * k, 0, 2 * PI);
+	ctx.fill();
+	ctx.stroke();
+	ctx.restore();
+}
+
+/* ============================================================
+   本体の描画
+   ============================================================ */
+function draw() {
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = BG;
+	ctx.fillRect(0, 0, cv.width, cv.height);
+	ctx.setTransform(1, 0, 0, 1, 0, offY + MT * k);
+
+	// 文字はすべて FS 以上（画面の高さの約 7% ＝ スライドの約 37pt 相当）
+	const FS = 56;
+	const X0 = 280, X1 = VWv - 260;     // 管の左端・右端（右側は波長の欄）
+	const A = 32;                       // 1つの振動の振幅（重なると最大 3 倍）
+
+	// 管の長さ L（寸法線）
+	const DY = 0;
+	line(X0, DY - 18, X0, DY + 18, 2.5, TEXT);
+	line(X1, DY - 18, X1, DY + 18, 2.5, TEXT);
+	dimArrow(X0, X1, DY);
+	const mid = (X0 + X1) / 2;
+	rect(mid - 175, DY - 34, 350, 68, BG);
+	text("管の長さ L", mid, DY, FS, TEXT, "center", true);
+
+	// 上：3つの振動が重なった気柱の振動
+	const CY0 = 140, half0 = 100;
+	text("3つの和", 30, CY0, FS, GREEN, "left", true);
+	tube(X0, X1, CY0, half0);
+	curve(total, X0, X1, CY0, A, 7, GREEN);
+	line(30, 258, VWv - 30, 258, 1.5, "#d9cec1");
+
+	// 下：3つの固有振動を1つずつ（左に名前、右に波長）
+	const laneTop = 262, laneH = 146;
+	MODES[kind].forEach(function (m, i) {
+		const CY = laneTop + laneH * (i + 0.5);
+		const h = 55;
+		if (i > 0) line(30, laneTop + laneH * i, VWv - 30, laneTop + laneH * i, 1, "#e3d9cd");
+		tube(X0, X1, CY, h);
+		curve(function (x) { return mode(m, x); }, X0, X1, CY, A, 4.5, EIG);
+		for (const xn of nodes(m)) dot(X0 + (X1 - X0) * xn, CY, NODE);
+		text(m === 1 ? "基本振動" : m + "倍振動", 30, CY, FS, EIG, "left", true);
+		lambdaText(m, X1 + 36, CY, FS);
+	});
+}
+
+// 両向き矢印の寸法線
+function dimArrow(x1, x2, y) {
+	line(x1, y, x2, y, 2, TEXT);
+	ctx.save();
+	ctx.fillStyle = TEXT;
+	for (const [x, s] of [[x1, 1], [x2, -1]]) {
+		ctx.beginPath();
+		ctx.moveTo(x * k, y * k);
+		ctx.lineTo((x + s * 16) * k, (y - 7) * k);
+		ctx.lineTo((x + s * 16) * k, (y + 7) * k);
+		ctx.closePath();
+		ctx.fill();
+	}
+	ctx.restore();
+}
+
+// 波長 λ = 4L/n（閉管）・2L/n（開管）を書く（割り切れないときは分数で）。分数の数字も size の大きさ
+function lambdaText(n, x, y, size) {
+	const head = "λ = ";
+	const num = (kind === "closed") ? 4 : 2;
+	if (num % n === 0) {
+		const q = num / n;
+		text(head + (q === 1 ? "" : q) + "L", x, y, size, TEXT, "left", true);
+		return;
+	}
+	text(head, x, y, size, TEXT, "left", true);
+	ctx.save();
+	ctx.font = "bold " + (size * k) + "px 'Hiragino Kaku Gothic ProN','Meiryo',sans-serif";
+	const w0 = ctx.measureText(head).width / k;
+	ctx.restore();
+	const fx = x + w0 + 4, fw = size * 1.3;
+	text(num + "L", fx + fw / 2, y - size * 0.6, size, TEXT, "center", true);
+	line(fx, y, fx + fw, y, 3, TEXT);
+	text(String(n), fx + fw / 2, y + size * 0.6, size, TEXT, "center", true);
+}
+
+/* ============================================================
+   時間を進める
+   ============================================================ */
+function animate(now) {
+	if (!lastNow) lastNow = now;
+	const dt = Math.min(0.05, (now - lastNow) / 1000);
+	lastNow = now;
+	if (!paused) t += dt * spd;
+	draw();
+	requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   ボタン
+   ============================================================ */
+function stop()    { paused = !paused; }
+function up()      { spd = Math.min(4, spd + 0.25); }
+function down()    { spd = Math.max(0, spd - 0.25); }
+function restart() { t = 0; spd = spdDef; draw(); }
+function setKind(s) { kind = s; t = 0; markButtons(); draw(); }
+function markButtons() {
+	document.getElementById("kClosed").classList.toggle("on", kind === "closed");
+	document.getElementById("kOpen").classList.toggle("on", kind === "open");
+}
+function buttonBack() { window.history.back(); }
+
+/* ---------- 画面をタップしたら全画面 ---------- */
+cv.addEventListener("click", function () {
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+		document.documentElement.requestFullscreen().catch(function () {});
+	}
+});
+document.addEventListener("touchmove", function (e) { e.preventDefault(); }, { passive: false });
+document.oncontextmenu = function () { return false; };
+
+/* ---------- 開始 ---------- */
+markButtons();
+resize();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
